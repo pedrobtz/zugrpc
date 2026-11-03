@@ -13,7 +13,7 @@ vignette: >
 knitr::opts_chunk$set(collapse = TRUE, comment = "#>", eval = FALSE)
 ```
 
-```{r setup}
+```{r setup, eval = TRUE}
 library(zugrpc)
 ```
 
@@ -106,7 +106,11 @@ tryCatch(
     cnd$details
   }
 )
+```
 
+`grpc_status_codes()` lists the codes a call can end with.
+
+```{r, eval = TRUE}
 grpc_status_codes()
 ```
 

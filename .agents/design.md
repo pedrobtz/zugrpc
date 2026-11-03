@@ -276,6 +276,10 @@ is kept as one remainder and concatenated at most once.
 Metadata is a named character vector. A name ending in `-bin` carries
 a raw vector in R and base64 on the wire, without padding, accepting
 padded or unpadded on receipt, as the specification requires (D9).
+*Decided 2026-11-03 (Stage 1):* because a character vector cannot hold a
+raw value, `metadata` also accepts a named list, whose `-bin` entries are
+raw and whose other entries are single strings of printable ASCII.
+Names may use only `0-9 a-z _ . -` after lower-casing.
 Names are lower-cased on the way out; a name starting with `grpc-`
 that is not one `zugrpc` sets is `zugrpc_error_argument`. `te`,
 `content-type`, `grpc-timeout` and the pseudo-headers cannot be set
@@ -288,7 +292,11 @@ per-call metadata overrides a channel header of the same name.
 (`OK` is 0, `CANCELLED` 1, `UNKNOWN` 2, up to `UNAUTHENTICATED` 16). A
 missing `grpc-status` on a completed response is `INTERNAL` with the
 message "missing grpc-status in trailers". `grpc-message` is
-percent-decoded as UTF-8.
+percent-decoded as UTF-8. *Decided 2026-11-03 (Stage 1):* a `grpc-status`
+that is not a decimal integer is `INTERNAL`, as grpc-go treats it, and an
+integer outside 0 to 16 is `UNKNOWN`. A malformed escape in `grpc-message`
+stays as received, and a message that does not decode to valid UTF-8 is
+kept undecoded, so decoding never hides the status.
 
 `grpc-status-details-bin` is base64 of a serialised `google.rpc.Status`
 (`code`, `message`, `repeated Any details`). `zugrpc` decodes it with
@@ -305,11 +313,13 @@ the Java class name, `domain` `org.apache.spark`, and `metadata` keys
 ### 6.6 Deadlines, cancellation and interrupts
 
 `deadline` is seconds from now or an absolute `POSIXct`. It becomes a
-`grpc-timeout` header in the largest unit that keeps eight digits (the
-specification's `H`, `M`, `S`, `m`, `u`, `n`) and the request's
-`total` timeout (zuhttp §24), so a dead server cannot hold a call: when
-`zuhttp` raises its timeout condition, `zugrpc` aborts the request and
-raises `DEADLINE_EXCEEDED` itself. A `connect` timeout on the channel
+`grpc-timeout` header and the request's `total` timeout (zuhttp §24), so
+a dead server cannot hold a call: when `zuhttp` raises its timeout
+condition, `zugrpc` aborts the request and raises `DEADLINE_EXCEEDED`
+itself. *Decided 2026-11-03 (Stage 1):* the header uses the finest unit
+whose value keeps to eight digits (the specification's `n`, `u`, `m`,
+`S`, `M`, `H`), since that loses the least precision, rounded up so the
+server never sees a shorter deadline than the caller set. A `connect` timeout on the channel
 bounds the TCP and TLS handshake through the same `zu_timeout()`.
 
 `$cancel()` aborts the request, which over HTTP/2 is
