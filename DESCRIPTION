@@ -1,15 +1,26 @@
 Package: zugrpc
-Title: What the Package Does (One Line, Title Case)
+Title: Client for 'gRPC' Remote Procedure Calls over 'HTTP/2'
 Version: 0.0.0.9000
 Authors@R: 
-    person("First", "Last", , "first.last@example.com", role = c("aut", "cre"))
-Description: What the package does (one paragraph).
+    person("Pedro", "Baltazar", , "pedrobtz@gmail.com", role = c("aut", "cre", "cph"))
+Description: A client for 'gRPC' remote procedure calls, written in 'R' on
+    top of the 'HTTP/2' requests that 'zuhttp' makes. Implements the 'gRPC'
+    wire protocol: length-prefixed messages, request headers and metadata,
+    deadlines, cancellation, and the call status carried in 'HTTP' trailers,
+    with error details decoded into structured conditions. Supports unary
+    and server-streaming calls, with streamed responses read one message at
+    a time. Messages are encoded and decoded by the caller, for example
+    with 'zuproto'.
 License: MIT + file LICENSE
 Encoding: UTF-8
+Language: en-GB
+Depends:
+    R (>= 4.1)
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 8.1.1
 Suggests: 
     testthat (>= 3.0.0)
 Config/testthat/edition: 3
-URL: https://pedrobtz.github.io/zugrpc/
+URL: https://github.com/pedrobtz/zugrpc, https://pedrobtz.github.io/zugrpc/
+BugReports: https://github.com/pedrobtz/zugrpc/issues
 Config/Needs/website: knitr, rmarkdown
