@@ -146,9 +146,47 @@ the decoded <code>google.rpc.Status</code>.</p>
 <span>  zugrpc_error_status <span class="op">=</span> <span class="kw">function</span><span class="op">(</span><span class="va">cnd</span><span class="op">)</span> <span class="op">{</span></span>
 <span>    <span class="va">cnd</span><span class="op">$</span><span class="va">details</span></span>
 <span>  <span class="op">}</span></span>
-<span><span class="op">)</span></span>
-<span></span>
-<span><span class="fu">grpc_status_codes</span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
+<span><span class="op">)</span></span></code></pre></div>
+<p><code><a href="../reference/grpc_status_codes.html">grpc_status_codes()</a></code> lists the codes a call can end
+with.</p>
+<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="fu"><a href="../reference/grpc_status_codes.html">grpc_status_codes</a></span><span class="op">(</span><span class="op">)</span></span>
+<span><span class="co">#&gt;    code                name</span></span>
+<span><span class="co">#&gt; 1     0                  OK</span></span>
+<span><span class="co">#&gt; 2     1           CANCELLED</span></span>
+<span><span class="co">#&gt; 3     2             UNKNOWN</span></span>
+<span><span class="co">#&gt; 4     3    INVALID_ARGUMENT</span></span>
+<span><span class="co">#&gt; 5     4   DEADLINE_EXCEEDED</span></span>
+<span><span class="co">#&gt; 6     5           NOT_FOUND</span></span>
+<span><span class="co">#&gt; 7     6      ALREADY_EXISTS</span></span>
+<span><span class="co">#&gt; 8     7   PERMISSION_DENIED</span></span>
+<span><span class="co">#&gt; 9     8  RESOURCE_EXHAUSTED</span></span>
+<span><span class="co">#&gt; 10    9 FAILED_PRECONDITION</span></span>
+<span><span class="co">#&gt; 11   10             ABORTED</span></span>
+<span><span class="co">#&gt; 12   11        OUT_OF_RANGE</span></span>
+<span><span class="co">#&gt; 13   12       UNIMPLEMENTED</span></span>
+<span><span class="co">#&gt; 14   13            INTERNAL</span></span>
+<span><span class="co">#&gt; 15   14         UNAVAILABLE</span></span>
+<span><span class="co">#&gt; 16   15           DATA_LOSS</span></span>
+<span><span class="co">#&gt; 17   16     UNAUTHENTICATED</span></span>
+<span><span class="co">#&gt;                                                      description</span></span>
+<span><span class="co">#&gt; 1                             Not an error; returned on success.</span></span>
+<span><span class="co">#&gt; 2          The operation was cancelled, typically by the caller.</span></span>
+<span><span class="co">#&gt; 3                                                 Unknown error.</span></span>
+<span><span class="co">#&gt; 4                      The client specified an invalid argument.</span></span>
+<span><span class="co">#&gt; 5      The deadline expired before the operation could complete.</span></span>
+<span><span class="co">#&gt; 6                           Some requested entity was not found.</span></span>
+<span><span class="co">#&gt; 7   The entity that a client attempted to create already exists.</span></span>
+<span><span class="co">#&gt; 8  The caller does not have permission to execute the operation.</span></span>
+<span><span class="co">#&gt; 9                              Some resource has been exhausted.</span></span>
+<span><span class="co">#&gt; 10      The system is not in a state required for the operation.</span></span>
+<span><span class="co">#&gt; 11                                    The operation was aborted.</span></span>
+<span><span class="co">#&gt; 12             The operation was attempted past the valid range.</span></span>
+<span><span class="co">#&gt; 13            The operation is not implemented or not supported.</span></span>
+<span><span class="co">#&gt; 14                                               Internal error.</span></span>
+<span><span class="co">#&gt; 15                         The service is currently unavailable.</span></span>
+<span><span class="co">#&gt; 16                        Unrecoverable data loss or corruption.</span></span>
+<span><span class="co">#&gt; 17   The request does not have valid authentication credentials.</span></span></code></pre></div>
 </div>
 <div class="section level2">
 <h2 id="close-and-inspect">Close and inspect<a class="anchor" aria-label="anchor" href="#close-and-inspect"></a>
@@ -156,7 +194,7 @@ the decoded <code>google.rpc.Status</code>.</p>
 <p>Closing a channel cancels its open streams.
 <code>zugrpc_info()</code> reports the zuhttp version, whether it offers
 HTTP/2 and its TLS backend.</p>
-<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu">grpc_close</span><span class="op">(</span><span class="va">ch</span><span class="op">)</span></span>
 <span><span class="fu">zugrpc_info</span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
 </div>
