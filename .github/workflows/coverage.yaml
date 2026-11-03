@@ -13,6 +13,6 @@ concurrency:
 
 jobs:
   coverage:
-    uses: pedrobtz/r-actions/.github/workflows/coverage.yml@v1
+    uses: pedrobtz/r-actions/.github/workflows/coverage.yml@9ac7f8ef7258033a7606a5481885fa8426dd324a # v1
     permissions:
       contents: write
