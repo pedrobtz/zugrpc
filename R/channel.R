@@ -81,6 +81,10 @@ grpc_channel <- function(
   ch$headers <- metadata_encode(headers)
   ch$max_message <- max_message
   ch$client <- client
+  # Streams bound max_message per message, not the whole body (§6.3).
+  ch$stream_client <- zuhttp::zu_client_update(client, max_body = Inf)
+  ch$streams <- new.env(parent = emptyenv())
+  ch$next_id <- 0
   ch$closed <- FALSE
   class(ch) <- "zugrpc_channel"
   ch
@@ -88,8 +92,10 @@ grpc_channel <- function(
 
 #' Close a gRPC channel
 #'
-#' Closes the channel's idle connections. A call on a closed channel raises
-#' `zugrpc_error_argument`. Closing a channel twice does nothing.
+#' Cancels the channel's open streams and closes its idle connections. A call
+#' on a closed channel raises `zugrpc_error_argument`, and a cancelled stream
+#' raises `zugrpc_error_cancelled` when it is next read. Closing a channel
+#' twice does nothing.
 #'
 #' @param channel A channel from [grpc_channel()].
 #'
@@ -102,6 +108,10 @@ grpc_close <- function(channel) {
   check_channel(channel, open = FALSE)
   if (!channel$closed) {
     channel$closed <- TRUE
+    for (id in ls(channel$streams)) {
+      try(zuhttp::zu_resp_abort(channel$streams[[id]]), silent = TRUE)
+    }
+    rm(list = ls(channel$streams), envir = channel$streams)
     zuhttp::zu_pool_reset(channel$client)
   }
   invisible(channel)
@@ -114,6 +124,7 @@ print.zugrpc_channel <- function(x, ...) {
   cat(sprintf("<zugrpc_channel> %s\n", x$authority))
   cat(sprintf("  transport: %s\n", transport))
   cat(sprintf("  state:     %s\n", state))
+  cat(sprintf("  streams:   %d open\n", length(ls(x$streams))))
   invisible(x)
 }
 

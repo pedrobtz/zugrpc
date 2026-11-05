@@ -20,8 +20,10 @@ RFC 0069. It outranks this file: `CLAUDE.md` orients, the design doc decides.
 
 ## Current state
 
-Scaffolded 2026-11-03 with `create-pkg.sh`; no functionality yet. The
-roadmap in `.agents/roadmap.md` takes it to v0.1.0.
+Scaffolded 2026-11-03 with `create-pkg.sh`. Stages 0 to 4 of
+`.agents/roadmap.md` are in: framing, unary and server-streaming calls,
+status details and the condition classes, live-tested over h2c and TLS.
+The roadmap takes it the rest of the way to v0.1.0.
 
 ## Stage tracking
 
@@ -82,8 +84,19 @@ air format .                                     # format R sources
 
 ## Architecture
 
-To be written as stages land; see `.agents/design.md`. There is no native
-layer: the scaffold has no `src/`, and the design keeps it that way.
+See `.agents/design.md` §4. There is no native layer: no `src/`, and the
+design keeps it that way.
+
+- `R/frame.R`, `R/metadata.R`, `R/timeout.R`, `R/status.R`: pure wire
+  format, no I/O.
+- `R/channel.R`: `grpc_channel()` derives two zuhttp clients with HTTP/2
+  required, one for unary calls (`max_body` bounded) and one for streams.
+- `R/call.R`: `build_request()`, shared with streams, and the unary
+  result, with the status resolution order of design §6.2.
+- `R/stream.R`: the pull iterator, with cancellation, the finaliser and
+  the channel's registry of open responses.
+- `R/details.R`, `R/conditions.R`: `google.rpc.Status` decoding against
+  `inst/descriptors/` and every condition constructor.
 
 ## Invariants that are easy to break
 
@@ -103,8 +116,11 @@ These are fixed by the design before any code exists.
 - **Status codes are condition classes** (D10). Every condition inherits
   from `zugrpc_error`, and a failed call carries `zugrpc_error_<code>`, so
   callers select by class. Renaming one breaks `zuspark`'s handlers.
-- **No network test runs unless `ZUGRPC_TEST_SERVER` is set** (design §12).
-  CRAN has no gRPC server.
+- **No network test runs unless its server's variable is set** (design
+  §10, §12): `ZU_GRPC_TEST_SERVER` and the others listed in
+  `tests/testthat/helper-live.R`, named as in zuhttp's tests. CRAN has no
+  gRPC server. `tools/ci-live.sh` starts every server and sets them;
+  `.github/workflows/live.yaml` runs it on all three platforms.
 
 ## Testing conventions
 
@@ -119,10 +135,13 @@ These are fixed by the design before any code exists.
   definition of done.
 - **Borrow a conformance suite before writing one.** Mainstream
   implementations in Python, Java, Go or Node usually ship a test corpus.
-  Use it as an oracle rather than inventing cases by hand. The design
-  (§10) plans `grpc-go`'s interop server and recorded responses from it;
-  none is in place yet.
-- **Helpers live in `tests/testthat/helper-*.R`.** None yet.
+  Use it as an oracle rather than inventing cases by hand. Here that is
+  `grpc-go`'s interop server at v1.67.1, live and as the recorded
+  responses in `tests/testthat/fixtures/` (written by
+  `tools/record-fixtures.R`), with `tools/test-server` for what it lacks.
+- **Helpers live in `tests/testthat/helper-*.R`.** `helper-replay.R`
+  replays fixtures through zuhttp's mock transport; `helper-live.R` gates
+  and encodes the live tests.
 - **Keep the suite inside the CRAN time budget.**
 
 ## Definition of done

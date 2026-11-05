@@ -68,24 +68,9 @@ grpc_call <- function(
   deadline = NULL
 ) {
   check_channel(channel)
-  check_method(method)
-  body <- frame_encode(request)
-  seconds <- deadline_seconds(deadline)
-  timeout <- if (!is.null(seconds)) grpc_timeout(seconds)
-  headers <- request_headers(
-    metadata = metadata_merge(channel$headers, metadata_encode(metadata)),
-    timeout = timeout,
-    user_agent = user_agent()
-  )
-
-  req <- zuhttp::zu_request("POST", paste0(channel$origin, method))
-  req <- do.call(zuhttp::zu_headers, c(list(req), as.list(headers)))
-  req <- zuhttp::zu_body_raw(req, body, type = "application/grpc+proto")
-  if (!is.null(seconds)) {
-    req <- zuhttp::zu_req_timeout(req, total = seconds)
-  }
+  req <- build_request(channel, method, request, metadata, deadline)
   res <- tryCatch(
-    zuhttp::zu_perform(req, client = channel$client),
+    zuhttp::zu_perform(req$request, client = channel$client),
     zuhttp_error = function(cnd) transport_abort(cnd, method)
   )
 
@@ -96,6 +81,33 @@ grpc_call <- function(
     trailers = zuhttp::zu_resp_trailers(res),
     method = method,
     max_message = channel$max_message
+  )
+}
+
+# The POST of §6.2: headers, metadata, deadline and the framed message.
+build_request <- function(channel, method, request, metadata, deadline) {
+  check_method(method)
+  body <- frame_encode(request)
+  seconds <- deadline_seconds(deadline)
+  if (!is.null(seconds) && seconds <= 0) {
+    # Nothing is sent: the server could only answer the same.
+    status_abort("DEADLINE_EXCEEDED", "deadline exceeded", method = method)
+  }
+  timeout <- if (!is.null(seconds)) grpc_timeout(seconds)
+  headers <- request_headers(
+    metadata = metadata_merge(channel$headers, metadata_encode(metadata)),
+    timeout = timeout,
+    user_agent = user_agent()
+  )
+  req <- zuhttp::zu_request("POST", paste0(channel$origin, method))
+  req <- do.call(zuhttp::zu_headers, c(list(req), as.list(headers)))
+  req <- zuhttp::zu_body_raw(req, body, type = "application/grpc+proto")
+  if (!is.null(seconds)) {
+    req <- zuhttp::zu_req_timeout(req, total = seconds)
+  }
+  list(
+    request = req,
+    deadline_at = if (!is.null(seconds)) Sys.time() + seconds
   )
 }
 

@@ -73,8 +73,6 @@ st <- grpc_stream(
   request = req_bytes, deadline = 600
 )
 st$headers()
-# Open: should $next_message() take a timeout of its own, or is the call
-# deadline enough?
 while (!is.null(m <- st$next_message())) {
   zuproto::proto_decode(m, type, pool)
 }
