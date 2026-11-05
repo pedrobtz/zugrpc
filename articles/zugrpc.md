@@ -12,19 +12,35 @@ protocol on top of zuhttp’s HTTP/2. You bring the request message,
 encoded with zuproto, and get back the response message, its metadata
 and its status. Calls can be unary or server-streaming.
 
+This article talks to a fake server, built in a hidden chunk with
+zuhttp’s mock transport, so that it runs anywhere. Its messages are
+plain text rather than protobuf, to keep the output readable. Against a
+real server, leave out `client = fake`.
+
 ## Open a channel
 
-A channel holds the connection to one server. An `http://` URL is
-cleartext HTTP/2, for a local server. An `https://` URL negotiates
-HTTP/2 over TLS.
+A channel holds what every call to one server shares. An `http://` URL
+is cleartext HTTP/2, for a local server. An `https://` URL negotiates
+HTTP/2 over TLS, with trust settings from
+[`zuhttp::zu_tls()`](https://pedrobtz.github.io/zuhttp/reference/zu_tls.html).
 
 ``` r
 
-ch <- grpc_channel("http://localhost:15002")
+ch <- grpc_channel("http://localhost:50051", client = fake)
+ch
+#> <zugrpc_channel> localhost:50051
+#>   transport: cleartext HTTP/2 (h2c)
+#>   state:     open
+#>   streams:   0 open
+```
 
-ch <- grpc_channel(
+`headers` go on every call, `keepalive` keeps an idle connection
+checked, and `max_message` limits the size of a response message.
+
+``` r
+
+grpc_channel(
   "https://spark.example.org:443",
-  tls = zuhttp::zu_tls(ca_file = NULL),
   headers = c(authorization = "Bearer ..."),
   keepalive = grpc_keepalive(time = 60, timeout = 20),
   max_message = 128 * 1024^2
@@ -34,67 +50,85 @@ ch <- grpc_channel(
 ## Make a unary call
 
 A unary call sends one request message and returns one response message.
-The request is a raw vector, typically from
+The request is a raw vector, usually from
 [`zuproto::proto_encode()`](https://pedrobtz.github.io/zuproto/reference/proto_encode.html).
 The deadline is in seconds, or an absolute `POSIXct`.
 
 ``` r
 
 res <- grpc_call(
-  ch, "/spark.connect.SparkConnectService/AnalyzePlan",
-  request = req_bytes,
-  metadata = c("x-user-agent" = "zuspark"),
+  ch, "/demo.Greeter/SayHello",
+  request = charToRaw("world"),
+  metadata = c("x-request-id" = "42"),
   deadline = 30
 )
-res$message
+rawToChar(res$message)
+#> [1] "hello, world"
 res$headers
-res$trailers
+#> $`x-served-by`
+#> [1] "fake"
 res$status
+#> [1] "OK"
 ```
 
 ## Stream the responses
 
 A server-streaming call returns a stream. Each `$next_message()` returns
-one response message, and `NULL` at the end. The server only sends more
-as you read.
+one response message, and `NULL` at the end. The server only sends as
+far ahead as you read.
 
 ``` r
 
-st <- grpc_stream(
-  ch, "/spark.connect.SparkConnectService/ExecutePlan",
-  request = req_bytes, deadline = 600
-)
-st$headers()
+st <- grpc_stream(ch, "/demo.Greeter/Count", request = raw(), deadline = 600)
 while (!is.null(m <- st$next_message())) {
-  zuproto::proto_decode(m, type, pool)
+  print(rawToChar(m))
 }
-st$trailers()
+#> [1] "one"
+#> [1] "two"
+#> [1] "three"
 st$status()
+#> [1] "OK"
 ```
 
-Cancel a stream you no longer need. A second cancel does nothing.
+Cancel a stream you no longer need. The connection stays open for other
+calls, and a second cancel does nothing.
 
 ``` r
 
+st <- grpc_stream(ch, "/demo.Greeter/Count", request = raw())
+rawToChar(st$next_message())
+#> [1] "one"
 st$cancel()
 ```
 
 ## Handle errors
 
-A call that ends with a non-OK status raises a `zugrpc_error_status`
-condition. Its class also carries the status, so you can catch one code.
-The `details` field holds the decoded `google.rpc.Status`.
+A call that ends with a status other than `OK` raises a
+`zugrpc_error_status` condition. Its class also carries the status, so
+you can catch one code.
 
 ``` r
 
 tryCatch(
-  grpc_call(ch, "/spark.connect.SparkConnectService/AnalyzePlan",
-            request = req_bytes),
-  zugrpc_error_unavailable = function(cnd) {
-    cnd$message
-  },
+  grpc_call(ch, "/demo.Greeter/SayGoodbye", request = raw()),
+  zugrpc_error_not_found = function(cnd) {
+    cnd$grpc_message
+  }
+)
+#> [1] "no such greeting"
+```
+
+The condition’s `details` field holds the decoded `google.rpc.Status`,
+with error details such as `ErrorInfo` unpacked. Spark Connect puts its
+error class and SQL state there:
+
+``` r
+
+tryCatch(
+  grpc_stream(spark, "/spark.connect.SparkConnectService/ExecutePlan",
+              request = bad_plan)$next_message(),
   zugrpc_error_status = function(cnd) {
-    cnd$details
+    cnd$details$details$ErrorInfo$metadata[["errorClass"]]
   }
 )
 ```
@@ -146,19 +180,28 @@ grpc_status_codes()
 ## Close and inspect
 
 Closing a channel cancels its open streams.
-[`zugrpc_info()`](https://pedrobtz.github.io/zugrpc/reference/zugrpc_info.md)
-reports the zuhttp version, whether it offers HTTP/2 and its TLS
-backend.
 
 ``` r
 
 grpc_close(ch)
+```
+
+[`zugrpc_info()`](https://pedrobtz.github.io/zugrpc/reference/zugrpc_info.md)
+reports the zuhttp version, whether it speaks HTTP/2 and its TLS
+backend.
+
+``` r
+
 zugrpc_info()
+#> zugrpc 0.0.0.9000 on zuhttp 0.1.0
+#>   HTTP/2:      yes
+#>   TLS backend: openssl
 ```
 
 ## Next
 
 See the [function
 reference](https://pedrobtz.github.io/zugrpc/reference/index.md) for
-every function. Stage 5 of the design adds an article on performance,
-measured against its targets.
+every function, and the [performance
+article](https://pedrobtz.github.io/zugrpc/articles/performance.md) for
+what a call costs.

@@ -2,8 +2,9 @@ pandoc: 3.8.3
 pkgdown: 2.2.1
 pkgdown_sha: ~
 articles:
+  articles/performance: performance.html
   zugrpc: zugrpc.html
-last_built: 2026-11-05T10:21Z
+last_built: 2026-11-05T10:41Z
 urls:
   reference: https://pedrobtz.github.io/zugrpc/reference
   article: https://pedrobtz.github.io/zugrpc/articles

@@ -8,6 +8,8 @@
   : Open a gRPC channel
 - [`grpc_close()`](https://pedrobtz.github.io/zugrpc/reference/grpc_close.md)
   : Close a gRPC channel
+- [`grpc_keepalive()`](https://pedrobtz.github.io/zugrpc/reference/grpc_keepalive.md)
+  : HTTP/2 keepalive settings
 - [`grpc_status_codes()`](https://pedrobtz.github.io/zugrpc/reference/grpc_status_codes.md)
   : gRPC status codes
 - [`grpc_stream()`](https://pedrobtz.github.io/zugrpc/reference/grpc_stream.md)

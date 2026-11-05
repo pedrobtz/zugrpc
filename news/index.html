@@ -17,6 +17,10 @@
     <div id="navbar" class="collapse navbar-collapse ms-3">
       <ul class="navbar-nav me-auto"><li class="nav-item"><a class="nav-link" href="../articles/zugrpc.html">Get started</a></li>
 <li class="nav-item"><a class="nav-link" href="../reference/index.html">Reference</a></li>
+<li class="nav-item dropdown">
+  <button class="nav-link dropdown-toggle" type="button" id="dropdown-articles" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Articles</button>
+  <ul class="dropdown-menu" aria-labelledby="dropdown-articles"><li><a class="dropdown-item" href="../articles/performance.html">Performance</a></li>
+  </ul></li>
 <li class="active nav-item"><a class="nav-link" href="../news/index.html">Changelog</a></li>
       </ul><ul class="navbar-nav"><li class="nav-item"><form class="form-inline" role="search">
  <input class="form-control" type="search" name="search-input" id="search-input" autocomplete="off" aria-label="Search site" placeholder="Search for" data-search-index="../search.json"></form></li>
@@ -43,6 +47,9 @@
 <li>
 <code><a href="../reference/grpc_stream.html">grpc_stream()</a></code> makes a server-streaming call. Its <code>$next_message()</code> returns one message at a time as it arrives, so the server sends only as fast as you read. <code>$cancel()</code> stops the call and keeps the connection. <code><a href="../reference/grpc_close.html">grpc_close()</a></code> cancels a channel’s open streams, and a stream that is no longer referenced is cancelled when it is garbage-collected.</li>
 <li>A call whose deadline has already passed fails with <code>DEADLINE_EXCEEDED</code> without being sent.</li>
+<li>
+<code><a href="../reference/grpc_keepalive.html">grpc_keepalive()</a></code> sets HTTP/2 keepalive for a channel. By default a connection idle for 60 seconds is checked with a PING before its next call, as Spark Connect’s Python client does.</li>
+<li>Each call no longer spends about a millisecond rebuilding the user-agent string.</li>
 <li>
 <code><a href="../reference/zugrpc_info.html">zugrpc_info()</a></code> reports the zuhttp version, whether it speaks HTTP/2, and its TLS backend.</li>
 <li>Failures below gRPC raise <code>zugrpc_error_transport</code>, which is also <code>zugrpc_error_unavailable</code>. A timeout is <code>DEADLINE_EXCEEDED</code>, and an interrupt raises <code>zugrpc_error_interrupt</code>.</li>

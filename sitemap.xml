@@ -4,6 +4,7 @@
 <url><loc>https://pedrobtz.github.io/zugrpc/LICENSE-text.html</loc></url>
 <url><loc>https://pedrobtz.github.io/zugrpc/LICENSE.html</loc></url>
 <url><loc>https://pedrobtz.github.io/zugrpc/articles/index.html</loc></url>
+<url><loc>https://pedrobtz.github.io/zugrpc/articles/performance.html</loc></url>
 <url><loc>https://pedrobtz.github.io/zugrpc/articles/zugrpc.html</loc></url>
 <url><loc>https://pedrobtz.github.io/zugrpc/authors.html</loc></url>
 <url><loc>https://pedrobtz.github.io/zugrpc/index.html</loc></url>
@@ -11,6 +12,7 @@
 <url><loc>https://pedrobtz.github.io/zugrpc/reference/grpc_call.html</loc></url>
 <url><loc>https://pedrobtz.github.io/zugrpc/reference/grpc_channel.html</loc></url>
 <url><loc>https://pedrobtz.github.io/zugrpc/reference/grpc_close.html</loc></url>
+<url><loc>https://pedrobtz.github.io/zugrpc/reference/grpc_keepalive.html</loc></url>
 <url><loc>https://pedrobtz.github.io/zugrpc/reference/grpc_status_codes.html</loc></url>
 <url><loc>https://pedrobtz.github.io/zugrpc/reference/grpc_stream.html</loc></url>
 <url><loc>https://pedrobtz.github.io/zugrpc/reference/index.html</loc></url>

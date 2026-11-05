@@ -14,6 +14,7 @@ grpc_channel(
   url,
   headers = NULL,
   tls = NULL,
+  keepalive = grpc_keepalive(),
   max_message = 128 * 1024^2,
   client = NULL
 )
@@ -38,6 +39,14 @@ grpc_channel(
   Certificate trust settings from
   [`zuhttp::zu_tls()`](https://pedrobtz.github.io/zuhttp/reference/zu_tls.html),
   for an `https://` URL.
+
+- keepalive:
+
+  HTTP/2 keepalive from
+  [`grpc_keepalive()`](https://pedrobtz.github.io/zugrpc/reference/grpc_keepalive.md),
+  or `NULL` for none. The default sends a PING on a connection idle for
+  60 seconds and replaces it if no answer comes within 20, as Spark
+  Connect's Python client does.
 
 - max_message:
 

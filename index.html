@@ -33,6 +33,12 @@
       <ul class="navbar-nav me-auto">
 <li class="nav-item"><a class="nav-link" href="articles/zugrpc.html">Get started</a></li>
 <li class="nav-item"><a class="nav-link" href="reference/index.html">Reference</a></li>
+<li class="nav-item dropdown">
+  <button class="nav-link dropdown-toggle" type="button" id="dropdown-articles" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Articles</button>
+  <ul class="dropdown-menu" aria-labelledby="dropdown-articles">
+<li><a class="dropdown-item" href="articles/performance.html">Performance</a></li>
+  </ul>
+</li>
 <li class="nav-item"><a class="nav-link" href="news/index.html">Changelog</a></li>
       </ul>
 <ul class="navbar-nav">
@@ -52,22 +58,77 @@
 </h1></div>
 <!-- badges: start -->
 
-<p>The goal of zugrpc is to …</p>
+<div class="section level2">
+<h2 id="overview">Overview<a class="anchor" aria-label="anchor" href="#overview"></a>
+</h2>
+<p><a href="https://grpc.io" class="external-link">gRPC</a> is how many services talk to each other, Spark Connect among them. It runs only over HTTP/2 and puts each call’s status in HTTP trailers, which the usual R HTTP clients do not expose. Until now, calling a gRPC service from R meant installing the gRPC C++ libraries or going through Python.</p>
+<p>zugrpc is a gRPC client written in R. It speaks the gRPC wire protocol over the HTTP/2 requests that <a href="https://github.com/pedrobtz/zuhttp" class="external-link">zuhttp</a> makes, so it needs no gRPC, protobuf or libcurl installed on the system. You encode and decode messages yourself, typically with <a href="https://github.com/pedrobtz/zuproto" class="external-link">zuproto</a>.</p>
+<ul>
+<li>
+<strong>Unary and server-streaming calls.</strong> <code><a href="reference/grpc_call.html">grpc_call()</a></code> returns one message; <code><a href="reference/grpc_stream.html">grpc_stream()</a></code> returns them one at a time as they arrive, and the server sends only as fast as you read.</li>
+<li>
+<strong>Errors you can select by class.</strong> Every status code is a condition class, such as <code>zugrpc_error_unavailable</code>, and the <code>google.rpc.Status</code> details, Spark’s <code>ErrorInfo</code> among them, are decoded for you.</li>
+<li>
+<strong>Deadlines and cancellation.</strong> A deadline goes to the server as <code>grpc-timeout</code> and also bounds the call locally. Cancelling a stream resets it with <code>RST_STREAM</code> and keeps the connection for other calls.</li>
+<li>
+<strong>zuhttp’s transport.</strong> Cleartext HTTP/2 for local servers, TLS with the platform’s own TLS stack and trust store, a connection pool and HTTP/2 keepalive.</li>
+</ul>
+</div>
 <div class="section level2">
 <h2 id="installation">Installation<a class="anchor" aria-label="anchor" href="#installation"></a>
 </h2>
-<p>You can install the development version of zugrpc from <a href="https://github.com/" class="external-link">GitHub</a> with:</p>
+<p>zugrpc is not on CRAN yet. Install the development version from GitHub:</p>
 <div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># install.packages("pak")</span></span>
 <span><span class="fu">pak</span><span class="fu">::</span><span class="fu"><a href="https://pak.r-lib.org/reference/pak.html" class="external-link">pak</a></span><span class="op">(</span><span class="st">"pedrobtz/zugrpc"</span><span class="op">)</span></span></code></pre></div>
 </div>
 <div class="section level2">
-<h2 id="example">Example<a class="anchor" aria-label="anchor" href="#example"></a>
+<h2 id="usage">Usage<a class="anchor" aria-label="anchor" href="#usage"></a>
 </h2>
-<p>This is a basic example which shows you how to solve a common problem:</p>
 <div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://github.com/pedrobtz/zugrpc" class="external-link">zugrpc</a></span><span class="op">)</span></span>
-<span><span class="co">## basic example code</span></span></code></pre></div>
+<code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://github.com/pedrobtz/zugrpc" class="external-link">zugrpc</a></span><span class="op">)</span></span></code></pre></div>
+<p>These examples talk to a fake server, built from zuhttp’s mock transport, with plain-text messages instead of protobuf. Against a real server, leave out <code>client = fake</code>.</p>
+<p>A channel holds what every call to one server shares.</p>
+<div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">ch</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/grpc_channel.html">grpc_channel</a></span><span class="op">(</span><span class="st">"http://localhost:50051"</span>, client <span class="op">=</span> <span class="va">fake</span><span class="op">)</span></span></code></pre></div>
+<p>A unary call sends one request message and returns one response.</p>
+<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">res</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/grpc_call.html">grpc_call</a></span><span class="op">(</span><span class="va">ch</span>, <span class="st">"/demo.Greeter/SayHello"</span>, <span class="fu"><a href="https://rdrr.io/r/base/rawConversion.html" class="external-link">charToRaw</a></span><span class="op">(</span><span class="st">"world"</span><span class="op">)</span>, deadline <span class="op">=</span> <span class="fl">5</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/rawConversion.html" class="external-link">rawToChar</a></span><span class="op">(</span><span class="va">res</span><span class="op">$</span><span class="va">message</span><span class="op">)</span></span>
+<span><span class="co">#&gt; [1] "hello, world"</span></span></code></pre></div>
+<p>A server-streaming call yields its messages one at a time, then <code>NULL</code>.</p>
+<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">st</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/grpc_stream.html">grpc_stream</a></span><span class="op">(</span><span class="va">ch</span>, <span class="st">"/demo.Greeter/Count"</span>, <span class="fu"><a href="https://rdrr.io/r/base/raw.html" class="external-link">raw</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="kw">while</span> <span class="op">(</span><span class="op">!</span><span class="fu"><a href="https://rdrr.io/r/base/NULL.html" class="external-link">is.null</a></span><span class="op">(</span><span class="va">m</span> <span class="op">&lt;-</span> <span class="va">st</span><span class="op">$</span><span class="fu">next_message</span><span class="op">(</span><span class="op">)</span><span class="op">)</span><span class="op">)</span> <span class="fu"><a href="https://rdrr.io/r/base/print.html" class="external-link">print</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/rawConversion.html" class="external-link">rawToChar</a></span><span class="op">(</span><span class="va">m</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="co">#&gt; [1] "one"</span></span>
+<span><span class="co">#&gt; [1] "two"</span></span>
+<span><span class="co">#&gt; [1] "three"</span></span>
+<span><span class="va">st</span><span class="op">$</span><span class="fu">status</span><span class="op">(</span><span class="op">)</span></span>
+<span><span class="co">#&gt; [1] "OK"</span></span></code></pre></div>
+<p>A failed call raises a condition whose class names its status.</p>
+<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/conditions.html" class="external-link">tryCatch</a></span><span class="op">(</span></span>
+<span>  <span class="fu"><a href="reference/grpc_call.html">grpc_call</a></span><span class="op">(</span><span class="va">ch</span>, <span class="st">"/demo.Greeter/SayGoodbye"</span>, <span class="fu"><a href="https://rdrr.io/r/base/raw.html" class="external-link">raw</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span>,</span>
+<span>  zugrpc_error_not_found <span class="op">=</span> <span class="kw">function</span><span class="op">(</span><span class="va">cnd</span><span class="op">)</span> <span class="va">cnd</span><span class="op">$</span><span class="va">grpc_message</span></span>
+<span><span class="op">)</span></span>
+<span><span class="co">#&gt; [1] "no such greeting"</span></span></code></pre></div>
+<p>Every function starts with <code>grpc_</code>, except <code><a href="reference/zugrpc_info.html">zugrpc_info()</a></code>, and the condition classes are <code>zugrpc_error_</code> followed by the status code in lower case.</p>
+</div>
+<div class="section level2">
+<h2 id="learn-more">Learn more<a class="anchor" aria-label="anchor" href="#learn-more"></a>
+</h2>
+<ul>
+<li>
+<a href="https://pedrobtz.github.io/zugrpc/articles/zugrpc.html">Get started</a> walks through channels, calls, streams, errors and cancellation.</li>
+<li>
+<a href="https://pedrobtz.github.io/zugrpc/articles/performance.html">Performance</a> reports what zugrpc adds to a call, measured.</li>
+<li>The <a href="https://pedrobtz.github.io/zugrpc/reference/">function reference</a> documents every function.</li>
+</ul>
+</div>
+<div class="section level2">
+<h2 id="related-work">Related work<a class="anchor" aria-label="anchor" href="#related-work"></a>
+</h2>
+<p>zugrpc follows gRPC’s <a href="https://github.com/grpc/grpc/blob/master/doc/PROTOCOL-HTTP2.md" class="external-link">HTTP/2 protocol</a> and <a href="https://github.com/grpc/grpc/blob/master/doc/statuscodes.md" class="external-link">status codes</a>. It is tested against <a href="https://github.com/grpc/grpc-go" class="external-link">grpc-go</a>’s interop server and against <a href="https://spark.apache.org/spark-connect/" class="external-link">Spark Connect</a>. It bundles the <code>google/rpc</code> protocol definitions from <a href="https://github.com/googleapis/googleapis" class="external-link">googleapis</a> to decode error details. <a href="https://CRAN.R-project.org/package=rgrpc" class="external-link">rgrpc</a> is a client and server built on the gRPC C++ libraries.</p>
 </div>
 </div>
   </main><aside class="col-md-3"><div class="links">
@@ -105,6 +166,7 @@
 <div class="dev-status">
 <h2 data-toc-skip>Dev status</h2>
 <ul class="list-unstyled">
+<li><a href="https://lifecycle.r-lib.org/articles/stages.html#experimental" class="external-link"><img src="https://img.shields.io/badge/lifecycle-experimental-orange.svg" alt="Lifecycle: experimental"></a></li>
 <li><a href="https://github.com/pedrobtz/zugrpc/actions/workflows/R-CMD-check.yaml" class="external-link"><img src="https://github.com/pedrobtz/zugrpc/actions/workflows/R-CMD-check.yaml/badge.svg" alt="R-CMD-check"></a></li>
 <li><a href="https://github.com/pedrobtz/zugrpc/actions/workflows/coverage.yaml" class="external-link"><img src="https://raw.githubusercontent.com/pedrobtz/zugrpc/main/.github/badges/coverage.svg" alt="coverage"></a></li>
 </ul>
