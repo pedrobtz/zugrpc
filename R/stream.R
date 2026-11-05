@@ -147,7 +147,8 @@ print.zugrpc_stream <- function(x, ...) {
 stream_next <- function(st) {
   repeat {
     if (st$channel$closed && !st$done) {
-      stream_finish(st, abort = TRUE)
+      # grpc_close() has already aborted the response.
+      stream_finish(st, abort = FALSE)
       st$cancelled <- TRUE
     }
     if (isTRUE(st$cancelled)) {

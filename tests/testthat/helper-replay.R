@@ -87,3 +87,27 @@ failing_channel <- function(class) {
 
 # A response body of whole messages, one per argument.
 stream_body <- function(...) do.call(c, lapply(list(...), wire_message))
+
+# Counts the calls zugrpc makes to zuhttp's zu_resp_abort(), which sends
+# RST_STREAM, and zu_pool_reset(), which closes connections, while still
+# making them. Cancellation must abort exactly once and never reset (D8).
+local_zuhttp_spy <- function(env = parent.frame()) {
+  calls <- new.env(parent = emptyenv())
+  calls$abort <- 0L
+  calls$reset <- 0L
+  abort <- zuhttp::zu_resp_abort
+  reset <- zuhttp::zu_pool_reset
+  testthat::local_mocked_bindings(
+    zu_resp_abort = function(resp) {
+      calls$abort <- calls$abort + 1L
+      abort(resp)
+    },
+    zu_pool_reset = function(client) {
+      calls$reset <- calls$reset + 1L
+      reset(client)
+    },
+    .package = "zuhttp",
+    .env = env
+  )
+  calls
+}
