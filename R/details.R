@@ -51,23 +51,14 @@ status_details_decode <- function(value) {
       status
     },
     error = function(e) {
-      cnd <- structure(
-        class = c(
-          "zugrpc_warning_details",
-          "zugrpc_warning",
-          "warning",
-          "condition"
+      warning(zugrpc_warning(
+        "details",
+        paste0(
+          "grpc-status-details-bin could not be decoded; `details` is NULL. ",
+          conditionMessage(e)
         ),
-        list(
-          message = paste0(
-            "grpc-status-details-bin could not be decoded; `details` is NULL. ",
-            conditionMessage(e)
-          ),
-          call = NULL,
-          parent = e
-        )
-      )
-      warning(cnd)
+        parent = e
+      ))
       NULL
     }
   )

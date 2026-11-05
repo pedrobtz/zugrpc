@@ -407,3 +407,26 @@ test_that("a transport failure when a stream opens is translated", {
     class = "zugrpc_error_unavailable"
   )
 })
+
+test_that("a stream that failed raises the same error on every later read", {
+  # Truncated body: the failure is found at the end.
+  m <- mock_channel(grpc_response(body = wire_message(as.raw(1:9))[1:8]))
+  st <- grpc_stream(m$channel, "/a.B/C", raw())
+  first <- expect_error(st$next_message(), class = "zugrpc_error_protocol")
+  again <- expect_error(st$next_message(), class = "zugrpc_error_protocol")
+  expect_identical(conditionMessage(again), conditionMessage(first))
+  expect_null(st$status())
+
+  # A transport failure while reading.
+  m <- mock_channel(grpc_response(body = stream_body(as.raw(1))))
+  st <- grpc_stream(m$channel, "/a.B/C", raw())
+  local({
+    local_mocked_bindings(
+      resp_read = function(res, n) {
+        stop(zuhttp::zu_condition("zu_io_error", "reset"))
+      }
+    )
+    expect_error(st$next_message(), class = "zugrpc_error_transport")
+  })
+  expect_error(st$next_message(), class = "zugrpc_error_transport")
+})

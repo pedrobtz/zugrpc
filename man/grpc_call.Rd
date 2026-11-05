@@ -24,7 +24,9 @@ bounds the request locally. \code{NULL} sets no deadline.}
 \value{
 A list with elements \code{message} (raw, the response message),
 \code{headers} and \code{trailers} (named lists of the initial and trailing
-metadata, with \code{-bin} values as raw vectors) and \code{status} (\code{"OK"}).
+metadata, with \code{-bin} values as raw vectors) and \code{status} (\code{"OK"}). A
+\code{-bin} value holding several, joined by commas, gives one entry each. One
+that is not base64 is dropped with a \code{zugrpc_warning_metadata} warning.
 }
 \description{
 Sends one request message to a method and returns the one response

@@ -38,7 +38,9 @@ The stream is an object with five methods:
 \item \verb{$headers()} returns the initial metadata, a named list.
 \item \verb{$next_message()} returns the next message as a raw vector, or \code{NULL}
 at the end of the stream. It raises a condition, as \code{\link[=grpc_call]{grpc_call()}} does,
-when the call ends with a status other than \code{OK}.
+when the call ends with a status other than \code{OK}. A stream that fails
+any other way, such as a lost connection, a passed deadline or a broken
+message, raises the same condition again on every later call.
 \item \verb{$trailers()} returns the trailing metadata once \verb{$next_message()} has
 returned \code{NULL}, and \code{NULL} before.
 \item \verb{$status()} returns the final status name, such as \code{"OK"}, once the

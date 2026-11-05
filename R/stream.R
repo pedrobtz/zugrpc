@@ -13,7 +13,9 @@
 #' * `$headers()` returns the initial metadata, a named list.
 #' * `$next_message()` returns the next message as a raw vector, or `NULL`
 #'   at the end of the stream. It raises a condition, as [grpc_call()] does,
-#'   when the call ends with a status other than `OK`.
+#'   when the call ends with a status other than `OK`. A stream that fails
+#'   any other way, such as a lost connection, a passed deadline or a broken
+#'   message, raises the same condition again on every later call.
 #' * `$trailers()` returns the trailing metadata once `$next_message()` has
 #'   returned `NULL`, and `NULL` before.
 #' * `$status()` returns the final status name, such as `"OK"`, once the
@@ -87,6 +89,8 @@ new_stream <- function(channel, res, method, deadline_at) {
   st$user_trailers <- NULL
   st$status <- NULL
   st$done <- FALSE
+  # The condition a failed stream raised, raised again by every later read.
+  st$error <- NULL
   # Pieces of the body not yet split into messages, concatenated only once
   # the message they belong to is complete (§6.3).
   st$pending <- list()
@@ -172,11 +176,17 @@ stream_next <- function(st) {
       )
     }
     if (st$done) {
+      if (!is.null(st$error)) {
+        stop(st$error)
+      }
       return(NULL)
     }
     if (!is.null(st$deadline_at) && Sys.time() >= st$deadline_at) {
       stream_finish(st, abort = TRUE)
-      status_abort("DEADLINE_EXCEEDED", "deadline exceeded", method = st$method)
+      stream_fail(
+        st,
+        status_error("DEADLINE_EXCEEDED", "deadline exceeded", method = st$method)
+      )
     }
     chunk <- stream_guard(st, resp_read(st$res, read_size(st)))
     if (length(chunk) == 0L) {
@@ -256,11 +266,14 @@ stream_end <- function(st) {
   st$trailers <- trailers
   st$user_trailers <- metadata_decode(user_metadata(trailers))
   if (st$pending_len > 0) {
-    zugrpc_abort(
-      "protocol",
-      "The response body ends inside a gRPC message.",
-      method = st$method,
-      http_status = st$http_status
+    stream_fail(
+      st,
+      zugrpc_error(
+        "protocol",
+        "The response body ends inside a gRPC message.",
+        method = st$method,
+        http_status = st$http_status
+      )
     )
   }
   status_fields <- trailers
@@ -311,17 +324,24 @@ stream_guard <- function(st, expr) {
     expr,
     zuhttp_error = function(cnd) {
       stream_finish(st, abort = TRUE)
-      transport_abort(cnd, st$method)
+      stream_fail(st, transport_error(cnd, st$method))
     },
     zugrpc_error = function(cnd) {
       stream_finish(st, abort = TRUE)
-      stop(stamp_call(cnd, st$method, st$http_status))
+      stream_fail(st, stamp_call(cnd, st$method, st$http_status))
     },
     error = function(cnd) {
       stream_finish(st, abort = TRUE)
-      stop(cnd)
+      stream_fail(st, cnd)
     }
   )
+}
+
+# Raises `cnd` and keeps it, so that a failed stream never later reads as a
+# clean end.
+stream_fail <- function(st, cnd) {
+  st$error <- cnd
+  stop(cnd)
 }
 
 # A seam for tests, which cannot raise an interrupt inside zuhttp.
