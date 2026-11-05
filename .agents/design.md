@@ -199,8 +199,8 @@ res <- grpc_call(ch, "/spark.connect.SparkConnectService/AnalyzePlan",
                  metadata = c("x-user-agent" = "zuspark"),
                  deadline = 30)              # seconds, or a POSIXct
 res$message      # raw: one response message
-res$headers      # named character, initial metadata
-res$trailers     # named character, trailing metadata
+res$headers      # named list, initial metadata
+res$trailers     # named list, trailing metadata
 res$status       # "OK"
 
 # server streaming
@@ -220,6 +220,13 @@ grpc_status_codes()          # the 17 codes as a data frame
 negotiated protocol, and the number of open streams. `$next_message()`
 returns `NULL` at end of stream and raises on a non-OK status.
 
+*Decided 2026-11-05 (Stage 2):* `grpc_call()` returns a plain list, not an
+S3 object, since its four fields need no accessors. `headers` and
+`trailers` are named lists, not character vectors, because a `-bin` value
+is raw in R (§6.4). They hold metadata only: `content-type`, `te`, the
+pseudo-headers and every `grpc-` field are left out. Keepalive is Stage 5's
+and is not yet an argument.
+
 ## 6. Semantics
 
 ### 6.1 Channels
@@ -233,6 +240,17 @@ SETTINGS, PING and GOAWAY are `zuhttp`'s (§7.2); the channel passes
 `keepalive` through, with defaults of 60 seconds between PINGs and 20
 to answer, as in Spark's Python client. A GOAWAY fails in-flight calls
 with `UNAVAILABLE`; the next call opens a new connection.
+
+*Decided 2026-11-05 (Stage 2):* `grpc_channel()` takes `client =`, a
+`zu_client()` the caller built (Q4). The channel derives its own client
+from it with `zu_client_update()`, setting `http2 = "required"`,
+`check = FALSE`, its user agent and `max_body = max_message + 5`, since
+zuhttp's default of 16 MiB is below the 128 MiB message limit. Proxies, TLS
+pins, middleware and transports come from zuhttp unchanged, which is also
+how the recorded-response tests inject `zu_mock_transport()`. The URL must
+be a bare origin, `http://host:port` or `https://host:port`. `grpc_close()`
+resets the client's pool and marks the channel closed; a call on a closed
+channel is `zugrpc_error_argument`.
 
 ### 6.2 Request and response framing
 
@@ -254,6 +272,14 @@ specification says: 400 `INTERNAL`, 401 `UNAUTHENTICATED`, 403
 `content-type` not starting with `application/grpc` is
 `zugrpc_error_protocol` with the first 1 KiB of the body, the usual
 symptom of a plain HTTP server.
+
+*Decided 2026-11-05 (Stage 2):* the order is: a `grpc-status` in the
+trailers; else, when the body is empty, one in the headers (Trailers-Only;
+zuhttp reports its trailers as empty); else a non-200 HTTP status maps as
+above; else a `content-type` that is not gRPC is the protocol error; else
+the status is the missing-status `INTERNAL`. So a `grpc-status` beats the
+HTTP status. A unary response with zero messages, like one with two, or
+one that ends inside a message, is `zugrpc_error_protocol`.
 
 ### 6.3 Messages and limits
 
@@ -526,7 +552,14 @@ warning, never an error, so the status is not lost behind a parser.
   Go server (unary, streaming, Trailers-Only, every status code, `-bin`
   metadata, a `Status` with `ErrorInfo`) replayed through `zuhttp`'s
   mock transport (§37), which needs trailers added to its response
-  constructor. These run on every platform.
+  constructor. These run on every platform. *Decided 2026-11-05
+  (Stage 2):* zuhttp's `zu_response(trailers =)` carries them. Each
+  fixture is a `dput()` text file under `tests/testthat/fixtures/`, so a
+  diff is reviewable, holding the request zugrpc must send and the
+  response as zuhttp received it. `tools/record-fixtures.R` writes them
+  against `grpc-go`'s interop server at v1.67.1, built with `go install`,
+  encoding the `grpc.testing` requests by hand so the fixtures check
+  zugrpc's encoder rather than repeat it.
 - **A local server in CI.** The Ubuntu legs run a gRPC server in Docker
   behind `ZUGRPC_TEST_SERVER`: `grpc-go`'s interop server
   (`interop/server`, Apache-2.0), built from a pinned tag, for the
@@ -658,9 +691,7 @@ any of them.
   is asked for; D6 records the fallback.
 - **Q3.** Should `$next_message()` take a `timeout` of its own, or is
   the call deadline enough? Spark's reattach loop may want the former.
-- **Q4.** Should `grpc_channel()` accept a `zu_client()` the caller
-  built, so proxies, pins and middleware come from `zuhttp`'s API
-  unchanged, with `zugrpc` adding only the HTTP/2 requirement?
+- **Q4.** *Settled 2026-11-05 (Stage 2):* yes, as `client =` (§6.1).
 - **Q5.** Is v0.1.0 a CRAN submission before `zuspark` exists, or does
   the pair go together? The board's `CRAN intent` records it.
 
