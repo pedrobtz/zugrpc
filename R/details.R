@@ -3,8 +3,6 @@
 # in inst/descriptors/, built by tools/gen-descriptors.sh (D4). Nothing else
 # is ever decoded with it.
 
-rpc_env <- new.env(parent = emptyenv())
-
 rpc_pool <- function() {
   if (is.null(rpc_env$pool)) {
     path <- system.file("descriptors", "google-rpc.binpb", package = "zugrpc")

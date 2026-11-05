@@ -268,7 +268,7 @@ check_content_type <- function(headers, body) {
       body = body[seq_len(min(length(body), 1024L))]
     )
   }
-  invisible()
+  invisible(headers)
 }
 
 # The first value of a header, or NULL when it is absent.

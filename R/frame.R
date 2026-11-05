@@ -1,6 +1,7 @@
 # The gRPC wire format (design §4 item 1, §6.2 to §6.4): pure functions over
 # raw vectors and character vectors. No I/O happens here.
 
+# grpc_channel()'s default max_message, which writes the same value out.
 default_max_message <- 128 * 1024^2
 
 # One length-prefixed message: a compressed-flag byte (always 0 in v0.1.0),
@@ -77,7 +78,7 @@ frame_split <- function(
 
 check_flag <- function(flag, encoding) {
   if (flag == 0L) {
-    return(invisible())
+    return(invisible(flag))
   }
   if (flag != 1L) {
     zugrpc_abort(
@@ -129,5 +130,5 @@ check_method <- function(method) {
       "`method` must be one string of the form \"/package.Service/Method\"."
     )
   }
-  method
+  invisible(method)
 }

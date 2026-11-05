@@ -42,6 +42,7 @@ grpc_channel <- function(
   headers = NULL,
   tls = NULL,
   keepalive = grpc_keepalive(),
+  # The same 128 MiB as default_max_message, written out for the usage.
   max_message = 128 * 1024^2,
   client = NULL
 ) {
@@ -140,53 +141,6 @@ print.zugrpc_channel <- function(x, ...) {
   invisible(x)
 }
 
-parse_target <- function(url) {
-  ok <- is.character(url) && length(url) == 1L && !is.na(url)
-  m <- if (ok) {
-    regmatches(
-      url,
-      regexec("^(https?)://([^/?#@]+)/?$", url, ignore.case = TRUE)
-    )[[1L]]
-  } else {
-    character()
-  }
-  if (length(m) != 3L) {
-    zugrpc_abort(
-      "argument",
-      "`url` must be one string, http://host:port or https://host:port."
-    )
-  }
-  scheme <- tolower(m[2L])
-  list(
-    origin = paste0(scheme, "://", m[3L]),
-    authority = m[3L],
-    tls = scheme == "https"
-  )
-}
-
-check_channel <- function(channel, open = TRUE) {
-  if (!inherits(channel, "zugrpc_channel")) {
-    zugrpc_abort("argument", "`channel` must come from grpc_channel().")
-  }
-  if (open && channel$closed) {
-    zugrpc_abort("argument", "The channel is closed.")
-  }
-  invisible(channel)
-}
-
-# Built once per session: packageVersion() takes about a millisecond, which
-# is more than the rest of a unary call's own work (design §11).
-user_agent <- function() {
-  if (is.null(rpc_env$user_agent)) {
-    rpc_env$user_agent <- sprintf(
-      "zugrpc/%s zuhttp/%s",
-      utils::packageVersion("zugrpc"),
-      utils::packageVersion("zuhttp")
-    )
-  }
-  rpc_env$user_agent
-}
-
 #' HTTP/2 keepalive settings
 #'
 #' A channel's connection can sit idle between calls, and a server or a
@@ -203,15 +157,8 @@ user_agent <- function() {
 #' grpc_keepalive()
 #' grpc_keepalive(time = 30, timeout = 10)
 grpc_keepalive <- function(time = 60, timeout = 20) {
-  for (arg in list(list("time", time), list("timeout", timeout))) {
-    v <- arg[[2L]]
-    if (!is.numeric(v) || length(v) != 1L || !is.finite(v) || v <= 0) {
-      zugrpc_abort(
-        "argument",
-        sprintf("`%s` must be one positive number of seconds.", arg[[1L]])
-      )
-    }
-  }
+  check_positive_seconds(time, "time")
+  check_positive_seconds(timeout, "timeout")
   structure(
     list(time = as.numeric(time), timeout = as.numeric(timeout)),
     class = "zugrpc_keepalive"
@@ -259,4 +206,61 @@ with_keepalive <- function(client, keepalive) {
       keepalive_timeout = keepalive$timeout
     )
   )
+}
+
+parse_target <- function(url) {
+  ok <- is.character(url) && length(url) == 1L && !is.na(url)
+  m <- if (ok) {
+    regmatches(
+      url,
+      regexec("^(https?)://([^/?#@]+)/?$", url, ignore.case = TRUE)
+    )[[1L]]
+  } else {
+    character()
+  }
+  if (length(m) != 3L) {
+    zugrpc_abort(
+      "argument",
+      "`url` must be one string, http://host:port or https://host:port."
+    )
+  }
+  scheme <- tolower(m[2L])
+  list(
+    origin = paste0(scheme, "://", m[3L]),
+    authority = m[3L],
+    tls = scheme == "https"
+  )
+}
+
+check_channel <- function(channel, open = TRUE) {
+  if (!inherits(channel, "zugrpc_channel")) {
+    zugrpc_abort("argument", "`channel` must come from grpc_channel().")
+  }
+  if (open && channel$closed) {
+    zugrpc_abort("argument", "The channel is closed.")
+  }
+  invisible(channel)
+}
+
+# Built once per session: packageVersion() takes about a millisecond, which
+# is more than the rest of a unary call's own work (design §11).
+user_agent <- function() {
+  if (is.null(rpc_env$user_agent)) {
+    rpc_env$user_agent <- sprintf(
+      "zugrpc/%s zuhttp/%s",
+      utils::packageVersion("zugrpc"),
+      utils::packageVersion("zuhttp")
+    )
+  }
+  rpc_env$user_agent
+}
+
+check_positive_seconds <- function(x, arg) {
+  if (!is.numeric(x) || length(x) != 1L || !is.finite(x) || x <= 0) {
+    zugrpc_abort(
+      "argument",
+      sprintf("`%s` must be one positive number of seconds.", arg)
+    )
+  }
+  invisible(x)
 }

@@ -167,6 +167,5 @@ base64_decode <- function(s) {
     bitwAnd(w, 255L)
   )
   out <- as.raw(as.vector(bytes))
-  drop <- pad
-  out[seq_len(length(out) - drop)]
+  out[seq_len(length(out) - pad)]
 }
