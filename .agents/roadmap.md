@@ -21,7 +21,7 @@ descriptor set moves from Stage 0 to Stage 3, the stage that first uses it.
 | 3 | [Status details and conditions](#stage-3--status-details-and-conditions) | quick | [#5](https://github.com/pedrobtz/zugrpc/issues/5) | [#16](https://github.com/pedrobtz/zugrpc/pull/16) | 2026-11-05 |
 | 4 | [Live HTTP/2 and streaming](#stage-4--live-http2-and-streaming) | full | [#6](https://github.com/pedrobtz/zugrpc/issues/6) | [#19](https://github.com/pedrobtz/zugrpc/pull/19) | 2026-11-05 |
 | 5 | [Spark, keepalive and performance](#stage-5--spark-keepalive-and-performance) | quick | [#7](https://github.com/pedrobtz/zugrpc/issues/7) | [#20](https://github.com/pedrobtz/zugrpc/pull/20) | 2026-11-05 |
-| 6 | [Full CI](#stage-6--full-ci) | full | [#8](https://github.com/pedrobtz/zugrpc/issues/8) | | |
+| 6 | [Full CI](#stage-6--full-ci) | full | [#8](https://github.com/pedrobtz/zugrpc/issues/8) | | 2026-11-05 |
 | 7 | [v0.1.0 readiness](#stage-7--v010-readiness) | full | [#9](https://github.com/pedrobtz/zugrpc/issues/9) | | |
 | 8 | [Review](#stage-8--review) | full | [#10](https://github.com/pedrobtz/zugrpc/issues/10) | | |
 
@@ -235,6 +235,14 @@ merged. No new features.
 - Run the full profile (`full-ci` label) and fix what it finds: every
   platform leg, the containers, `nosuggests`, `nold`, cran-special and any
   failures recorded on this stage's issue.
+
+**Deviations (2026-11-05).** `nosuggests` and `nold` are off by default in
+r-actions, so this stage turns them on in the `R-CMD-check` caller.
+`cran-special` is a native-code check (the `src/` row of r-actions' table)
+and does not apply: zugrpc has no `src/` (D1, D7). The issue recorded no
+full-only failures, and the full run on Stage 5's merge
+([`cf920bb`](https://github.com/pedrobtz/zugrpc/commit/cf920bb39f646d4a7e4354c69b7fedb2612e4757))
+was green, `live.yaml` included.
 
 **Exit criteria.**
 
