@@ -1,8 +1,11 @@
 Package: zugrpc
 Title: Client for 'gRPC' Remote Procedure Calls over 'HTTP/2'
 Version: 0.0.0.9000
-Authors@R: 
-    person("Pedro", "Baltazar", , "pedrobtz@gmail.com", role = c("aut", "cre", "cph"))
+Authors@R: c(
+    person("Pedro", "Baltazar", , "pedrobtz@gmail.com", role = c("aut", "cre", "cph")),
+    person("Google LLC", role = "cph",
+           comment = "google/rpc protocol definitions in inst/descriptors")
+    )
 Description: A client for 'gRPC' remote procedure calls, written in 'R' on
     top of the 'HTTP/2' requests that 'zuhttp' makes. Implements the 'gRPC'
     wire protocol: length-prefixed messages, request headers and metadata,
@@ -19,11 +22,13 @@ Depends:
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 8.1.1
 Imports:
-    zuhttp
+    zuhttp,
+    zuproto
 Suggests: 
     testthat (>= 3.0.0)
 Remotes:
-    pedrobtz/zuhttp
+    pedrobtz/zuhttp,
+    pedrobtz/zuproto
 Config/testthat/edition: 3
 URL: https://github.com/pedrobtz/zugrpc, https://pedrobtz.github.io/zugrpc/
 BugReports: https://github.com/pedrobtz/zugrpc/issues
