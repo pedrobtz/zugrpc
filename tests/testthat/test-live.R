@@ -273,3 +273,16 @@ test_that("live: a stream's whole body may exceed max_message", {
   }
   expect_identical(got, rep(900, 20))
 })
+
+test_that("live: tls = zu_tls(ca_file =) trusts a private CA", {
+  url <- live_server("ZU_GRPC_TEST_TLS")
+  ca <- Sys.getenv("ZU_GRPC_TEST_CA")
+  skip_if_not(
+    "ca_file" %in% zuhttp::zu_info()$tls_capabilities,
+    "this TLS backend cannot take a private CA (zuhttp#5)"
+  )
+  ch <- grpc_channel(url, tls = zuhttp::zu_tls(ca_file = ca))
+  withr::defer(grpc_close(ch))
+  res <- grpc_call(ch, paste0(interop, "EmptyCall"), raw(), deadline = 10)
+  expect_identical(res$status, "OK")
+})

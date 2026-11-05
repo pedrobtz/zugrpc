@@ -1,5 +1,24 @@
 # zugrpc 0.0.0.9000
 
+* A call or stream with no deadline no longer fails with
+  `DEADLINE_EXCEEDED` after 30 seconds, zuhttp's default timeout (#23).
+* A server's malformed `grpc-message` or `-bin` metadata no longer hides
+  the call's status. A `-bin` value that is not base64 is dropped with a
+  `zugrpc_warning_metadata` warning, and comma-joined values are split
+  (#25, #26).
+* `grpc_close()` no longer closes the connections of the `zuhttp` client a
+  channel was built on, or of other channels built on it (#27).
+* Every condition of a call carries `method`, and `http_status` once there
+  is a response (#28).
+* A stream that failed raises the same condition on every later
+  `$next_message()`, instead of reading as a clean end (#35).
+* Metadata named `host`, or a connection header HTTP/2 forbids, is an
+  argument error. A `user-agent` you set is sent before zugrpc's own
+  instead of being replaced (#36).
+* A method name must use protobuf name characters (#50).
+* Reading many small messages from a stream no longer slows down with the
+  number in each read (#34).
+
 * `grpc_channel()` opens a channel to a gRPC server over cleartext HTTP/2
   (`http://`) or TLS (`https://`). It can build on a `zuhttp::zu_client()`
   you supply, so proxies, TLS settings and test transports carry over.

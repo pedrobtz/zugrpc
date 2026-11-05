@@ -259,6 +259,11 @@ be a bare origin, `http://host:port` or `https://host:port`. `grpc_close()`
 resets the client's pool and marks the channel closed; a call on a closed
 channel is `zugrpc_error_argument`.
 
+*Decided 2026-11-05 (Review, #27):* the channel's client always gets a
+pool of its own, even when its pool settings equal the caller's, so
+`grpc_close()` never clears the caller's connections or another
+channel's. The stream client shares the channel's pool.
+
 ### 6.2 Request and response framing
 
 From `PROTOCOL-HTTP2.md`. The request is `POST` to the method path
@@ -328,6 +333,16 @@ that is not one `zugrpc` sets is `zugrpc_error_argument`. `te`,
 `content-type`, `grpc-timeout` and the pseudo-headers cannot be set
 through `metadata`; `headers` on the channel go on every call, and
 per-call metadata overrides a channel header of the same name.
+
+*Decided 2026-11-05 (Review, #26, #36):* received metadata never decides
+a call's outcome. A `-bin` value may join several with commas; each
+becomes an entry of the same name, as a repeated header does. A value
+that is not base64 is dropped with a `zugrpc_warning_metadata`. On the
+way out, `host` and the connection-specific headers RFC 9113 §8.2.2
+forbids (`connection`, `keep-alive`, `proxy-connection`,
+`transfer-encoding`, `upgrade`) are `zugrpc_error_argument`, and a
+caller's `user-agent` is sent before zugrpc's own. One rule decides the
+reserved names in both directions.
 
 ### 6.5 Status and status details
 
@@ -401,6 +416,16 @@ nobody holds can still be collected; its finaliser aborts the response
 and removes it. `grpc_close()` aborts every response it holds, and each
 stream sees the closed channel at its next read. A stream object is a
 list of the five closures of §5 with class `zugrpc_stream`.
+
+*Decided 2026-11-05 (Review, #23, #35):* with no deadline the request's
+local timeout is `Inf`, not zuhttp's 30-second default, and a positive
+deadline under 1 ms is sent to zuhttp as 1 ms, since it reads 0 as its
+default. A stream that fails other than by a status (transport,
+protocol, local deadline) raises the same condition on every later
+`$next_message()`; one that ends with a non-OK status raises it once and
+then returns `NULL`, with `$status()` set. The finaliser's
+`zu_resp_abort()` from GC is the same abort zuhttp's own finaliser makes
+(`zuh_open_body_free()`), and it is registered before the response is.
 
 ### 6.7 What Spark cannot use
 
