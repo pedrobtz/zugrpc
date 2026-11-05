@@ -13,3 +13,5 @@
 ^docs$
 ^pkgdown$
 ^\.superpowers$
+^tools/go\.(mod|sum)$
+^tools/status-server$

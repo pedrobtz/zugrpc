@@ -25,5 +25,10 @@ Authors:
   \item Pedro Baltazar \email{pedrobtz@gmail.com} [copyright holder]
 }
 
+Other contributors:
+\itemize{
+  \item Google LLC (google/rpc protocol definitions in inst/descriptors) [copyright holder]
+}
+
 }
 \keyword{internal}

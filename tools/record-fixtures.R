@@ -1,13 +1,16 @@
-# Records the unary responses that tests/testthat/test-call.R replays.
+# Records the unary responses that the tests replay.
 #
 # Run from the package root against grpc-go's interop server, built from the
-# pinned tag:
+# pinned tag, and the status-details server in tools/status-server, which
+# uses the same grpc-go version:
 #
 #   go install google.golang.org/grpc/interop/server@v1.67.1
 #   server --port 50051 &
-#   Rscript tools/record-fixtures.R localhost:50051
+#   (cd tools && go run ./status-server -port 50052) &
+#   Rscript tools/record-fixtures.R localhost:50051 localhost:50052
 #
-# Each fixture is one `dput()` text file in tests/testthat/fixtures/unary/:
+# Each fixture is one `dput()` text file in tests/testthat/fixtures/unary/
+# (interop server) or tests/testthat/fixtures/details/ (status server):
 # the request zugrpc should send (method and framed body) and the response
 # exactly as zuhttp received it (HTTP status, headers, body and trailers).
 # The requests are built by hand here, not by zugrpc, so the fixtures check
@@ -16,9 +19,9 @@
 library(zuhttp)
 
 args <- commandArgs(trailingOnly = TRUE)
-authority <- if (length(args)) args[[1]] else "localhost:50051"
-out <- file.path("tests", "testthat", "fixtures", "unary")
-dir.create(out, recursive = TRUE, showWarnings = FALSE)
+interop <- if (length(args) >= 1L) args[[1]] else "localhost:50051"
+details <- if (length(args) >= 2L) args[[2]] else "localhost:50052"
+fixtures <- file.path("tests", "testthat", "fixtures")
 
 client <- zu_client(http2 = "required", check = FALSE)
 
@@ -62,7 +65,17 @@ frame <- function(bytes) {
   )
 }
 
-record <- function(name, method, message = raw(), metadata = NULL) {
+record <- function(
+  name,
+  method,
+  message = raw(),
+  metadata = NULL,
+  authority = interop,
+  dir = "unary",
+  server = "grpc-go v1.67.1 interop server"
+) {
+  out <- file.path(fixtures, dir)
+  dir.create(out, recursive = TRUE, showWarnings = FALSE)
   body <- frame(message)
   req <- zu_request("POST", paste0("http://", authority, method))
   req <- do.call(
@@ -84,7 +97,7 @@ record <- function(name, method, message = raw(), metadata = NULL) {
   con <- file(path, "w", encoding = "UTF-8")
   writeLines(
     c(
-      sprintf("# Recorded from grpc-go v1.67.1 interop server: %s", method),
+      sprintf("# Recorded from %s: %s", server, method),
       "# Regenerate with tools/record-fixtures.R; do not edit by hand."
     ),
     con
@@ -127,3 +140,13 @@ record(
   "unimplemented-service",
   "/grpc.testing.UnimplementedService/UnimplementedCall"
 )
+
+for (name in c("Spark", "Every")) {
+  record(
+    tolower(name),
+    paste0("/zugrpc.test.Status/", name),
+    authority = details,
+    dir = "details",
+    server = "tools/status-server (grpc-go v1.67.1)"
+  )
+}

@@ -1,0 +1,7 @@
+# Recorded from tools/status-server (grpc-go v1.67.1): /zugrpc.test.Status/Every
+# Regenerate with tools/record-fixtures.R; do not edit by hand.
+list(request = list(method = "/zugrpc.test.Status/Every", body = as.raw(c(0x00, 
+0x00, 0x00, 0x00, 0x00)), metadata = NULL), response = list(status = 200L, 
+    headers = c(`content-type` = "application/grpc+proto", `grpc-status` = "14", 
+    `grpc-message` = "try again", `grpc-status-details-bin` = "CA4SCXRyeSBhZ2Fpbho2Cih0eXBlLmdvb2dsZWFwaXMuY29tL2dvb2dsZS5ycGMuUmV0cnlJbmZvEgoKCAgBEIDKte4BGjkKKHR5cGUuZ29vZ2xlYXBpcy5jb20vZ29vZ2xlLnJwYy5EZWJ1Z0luZm8SDQoBYQoBYhIFZGVidWcaNwordHlwZS5nb29nbGVhcGlzLmNvbS9nb29nbGUucnBjLlF1b3RhRmFpbHVyZRIICgYKAXMSAWQaQwoydHlwZS5nb29nbGVhcGlzLmNvbS9nb29nbGUucnBjLlByZWNvbmRpdGlvbkZhaWx1cmUSDQoLCgNUT1MSAXMaAWQaNQopdHlwZS5nb29nbGVhcGlzLmNvbS9nb29nbGUucnBjLkJhZFJlcXVlc3QSCAoGCgFmEgFkGjUKKnR5cGUuZ29vZ2xlYXBpcy5jb20vZ29vZ2xlLnJwYy5SZXF1ZXN0SW5mbxIHCgJyMRIBeBo/Cit0eXBlLmdvb2dsZWFwaXMuY29tL2dvb2dsZS5ycGMuUmVzb3VyY2VJbmZvEhAKBXRhYmxlEgF0GgFvIgFkGkQKI3R5cGUuZ29vZ2xlYXBpcy5jb20vZ29vZ2xlLnJwYy5IZWxwEh0KGwoEZG9jcxITaHR0cHM6Ly9leGFtcGxlLm9yZxpCCi90eXBlLmdvb2dsZWFwaXMuY29tL2dvb2dsZS5ycGMuTG9jYWxpemVkTWVzc2FnZRIPCgVlbi1HQhIGY29sb3VyGjIKLHR5cGUuZ29vZ2xlYXBpcy5jb20vZ29vZ2xlLnByb3RvYnVmLkR1cmF0aW9uEgIIAg"
+    ), body = raw(0), trailers = structure(character(0), names = character(0))))
