@@ -403,3 +403,14 @@ test_that("a caller's user-agent goes before zugrpc's", {
   expect_match(ua[1], "^chan/1 zugrpc/[0-9.]+ zuhttp/")
   expect_match(ua[2], "^me/2 zugrpc/[0-9.]+ zuhttp/")
 })
+
+test_that("a header grpc-status counts only when there is no body", {
+  # Trailers-Only means headers and no body; with a body, the trailers
+  # decide (§6.2).
+  m <- mock_channel(grpc_response(
+    body = wire_message(as.raw(1)),
+    headers = c("content-type" = "application/grpc", "grpc-status" = "5"),
+    trailers = c("grpc-status" = "0")
+  ))
+  expect_identical(grpc_call(m$channel, "/a.B/C", raw())$message, as.raw(1))
+})

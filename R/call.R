@@ -161,39 +161,24 @@ unary_outcome <- function(
     status_fields <- headers
   }
   status_value <- field(status_fields, "grpc-status")
-  message_value <- field(status_fields, "grpc-message")
 
   if (is.null(status_value)) {
     if (http_status != 200L) {
-      status_abort(
-        status_from_http(http_status),
-        sprintf("HTTP status %d with no grpc-status", http_status),
-        http_status = http_status,
-        method = method,
-        headers = user_headers,
-        trailers = user_trailers
-      )
+      stop(http_status_error(http_status, method, user_headers, user_trailers))
     }
     check_content_type(headers, body)
   }
 
   status <- status_from_header(status_value)
   if (status$name != "OK") {
-    msg <- grpc_message_decode(message_value)
-    if (!nzchar(msg)) {
-      msg <- status$message
-    }
-    status_abort(
-      status$name,
-      msg,
-      details = status_details_decode(
-        field(status_fields, "grpc-status-details-bin")
-      ),
-      http_status = http_status,
-      method = method,
-      headers = user_headers,
-      trailers = user_trailers
-    )
+    stop(grpc_status_error(
+      status,
+      status_fields,
+      http_status,
+      method,
+      user_headers,
+      user_trailers
+    ))
   }
   check_content_type(headers, body)
 
@@ -225,6 +210,45 @@ unary_outcome <- function(
     headers = user_headers,
     trailers = user_trailers,
     status = "OK"
+  )
+}
+
+# The condition for a non-OK status, from the fields that carried it: the
+# trailers, or the headers of a Trailers-Only response (§6.2, §6.5). An
+# empty grpc-message falls back to what status_from_header() found, such as
+# a missing grpc-status.
+grpc_status_error <- function(
+  status,
+  fields,
+  http_status,
+  method,
+  headers,
+  trailers
+) {
+  message <- grpc_message_decode(field(fields, "grpc-message"))
+  if (!nzchar(message)) {
+    message <- status$message
+  }
+  status_error(
+    status$name,
+    message,
+    details = status_details_decode(field(fields, "grpc-status-details-bin")),
+    http_status = http_status,
+    method = method,
+    headers = headers,
+    trailers = trailers
+  )
+}
+
+# The condition for a non-200 response with no grpc-status (§6.2).
+http_status_error <- function(http_status, method, headers, trailers) {
+  status_error(
+    status_from_http(http_status),
+    sprintf("HTTP status %d with no grpc-status", http_status),
+    http_status = http_status,
+    method = method,
+    headers = headers,
+    trailers = trailers
   )
 }
 

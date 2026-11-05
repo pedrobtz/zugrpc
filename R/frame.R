@@ -23,6 +23,12 @@ frame_encode <- function(message) {
   c(prefix, message)
 }
 
+# The message length a five-byte prefix declares, as a double: it can exceed
+# an integer.
+frame_length <- function(prefix) {
+  sum(as.numeric(prefix[2:5]) * c(16777216, 65536, 256, 1))
+}
+
 # Splits a buffer into its complete messages and the bytes of an incomplete
 # one. Walks offsets rather than re-slicing the remainder, so many small
 # messages cost one copy each and nothing quadratic. A declared length above
@@ -39,9 +45,7 @@ frame_split <- function(
   pos <- 1L
   while (n - pos + 1L >= 5L) {
     flag <- as.integer(buf[pos])
-    len <- sum(
-      as.numeric(buf[(pos + 1L):(pos + 4L)]) * c(16777216, 65536, 256, 1)
-    )
+    len <- frame_length(buf[pos:(pos + 4L)])
     check_flag(flag, encoding)
     if (len > max_message) {
       status_abort(

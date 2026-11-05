@@ -121,7 +121,7 @@ grpc_close <- function(channel) {
   if (!channel$closed) {
     channel$closed <- TRUE
     for (id in ls(channel$streams)) {
-      try(zuhttp::zu_resp_abort(channel$streams[[id]]), silent = TRUE)
+      abort_response(channel$streams[[id]])
     }
     rm(list = ls(channel$streams), envir = channel$streams)
     zuhttp::zu_pool_reset(channel$client)

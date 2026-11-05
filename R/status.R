@@ -68,7 +68,7 @@ status_from_header <- function(value) {
   if (is.null(value) || length(value) == 0L || is.na(value[1L])) {
     return(list(
       name = "INTERNAL",
-      code = 13L,
+      code = status_code("INTERNAL"),
       message = "missing grpc-status in trailers"
     ))
   }
@@ -76,14 +76,14 @@ status_from_header <- function(value) {
   if (!grepl("^[0-9]{1,9}$", value)) {
     return(list(
       name = "INTERNAL",
-      code = 13L,
+      code = status_code("INTERNAL"),
       message = sprintf("malformed grpc-status '%s'", value)
     ))
   }
   code <- as.integer(value)
   i <- match(code, status_table$code)
   if (is.na(i)) {
-    return(list(name = "UNKNOWN", code = 2L, message = ""))
+    return(list(name = "UNKNOWN", code = status_code("UNKNOWN"), message = ""))
   }
   list(name = status_table$name[i], code = code, message = "")
 }

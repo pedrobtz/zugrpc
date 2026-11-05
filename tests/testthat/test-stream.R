@@ -430,3 +430,18 @@ test_that("a stream that failed raises the same error on every later read", {
   })
   expect_error(st$next_message(), class = "zugrpc_error_transport")
 })
+
+test_that("a stream's status with no message falls back to its description", {
+  m <- mock_channel(grpc_response(
+    body = raw(),
+    trailers = c("grpc-status" = "14")
+  ))
+  st <- grpc_stream(m$channel, "/a.B/C", raw())
+  cnd <- expect_error(st$next_message(), class = "zugrpc_error_unavailable")
+  expect_identical(cnd$grpc_message, "")
+
+  m <- mock_channel(grpc_response(body = raw(), trailers = c()))
+  st <- grpc_stream(m$channel, "/a.B/C", raw())
+  cnd <- expect_error(st$next_message(), class = "zugrpc_error_internal")
+  expect_identical(cnd$grpc_message, "missing grpc-status in trailers")
+})
