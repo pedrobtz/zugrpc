@@ -98,3 +98,25 @@ t_cancel <- vapply(seq_len(20), function(i) {
   elapsed(st$cancel())
 }, numeric(1))
 cat(sprintf("cancel: median %s, max %s over 20\n", ms(median(t_cancel)), ms(max(t_cancel))))
+
+# 5. Many small messages in each read, offline through zuhttp's mock: a
+#    64 KiB read of 1-byte messages queues about 11,000 at once, so popping
+#    them must not copy the queue (review #34). Microseconds per message.
+in_one_read <- function(k) {
+  body <- rep(as.raw(c(0, 0, 0, 0, 1, 7)), k)
+  fake <- zuhttp::zu_mock_transport(function(req) {
+    zuhttp::zu_response(
+      200L,
+      headers = c("content-type" = "application/grpc"),
+      body = body,
+      trailers = c("grpc-status" = "0")
+    )
+  })
+  mch <- grpc_channel("http://localhost:1", client = zuhttp::zu_client(transport = fake))
+  st <- grpc_stream(mch, "/a.B/C", raw())
+  elapsed(while (!is.null(st$next_message())) NULL) / k
+}
+cat(sprintf(
+  "small messages, offline: %.1f us each at 10,000, %.1f us each at 50,000\n",
+  1e6 * in_one_read(1e4), 1e6 * in_one_read(5e4)
+))

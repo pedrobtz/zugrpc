@@ -91,7 +91,11 @@ new_stream <- function(channel, res, method, deadline_at) {
   # the message they belong to is complete (§6.3).
   st$pending <- list()
   st$pending_len <- 0
+  # Messages split but not yet returned, from queue[[head]] on. Popping by
+  # index rather than deleting the first element keeps a read of many small
+  # messages linear (§11).
   st$queue <- list()
+  st$head <- 1L
   st$id <- register_stream(channel, res)
   st$channel <- channel
 
@@ -152,13 +156,14 @@ stream_next <- function(st) {
       st$cancelled <- TRUE
     }
     if (isTRUE(st$cancelled)) {
-      st$queue <- list()
+      queue_clear(st)
     }
-    if (length(st$queue) > 0L) {
-      msg <- st$queue[[1L]]
-      st$queue[[1L]] <- NULL
+    if (st$head <= length(st$queue)) {
+      msg <- st$queue[[st$head]]
+      st$head <- st$head + 1L
       return(msg)
     }
+    queue_clear(st)
     if (isTRUE(st$cancelled)) {
       status_abort(
         "CANCELLED",
@@ -180,6 +185,11 @@ stream_next <- function(st) {
       stream_take(st, chunk)
     }
   }
+}
+
+queue_clear <- function(st) {
+  st$queue <- list()
+  st$head <- 1L
 }
 
 # Up to the rest of the message being read, so a large message arrives in
