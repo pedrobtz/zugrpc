@@ -24,6 +24,10 @@ jobs:
       profile: ${{ github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'full-ci') && 'quick' || 'full' }}
       # The shared default has no R-devel runner; this row covers CRAN's own
       # Windows R-devel check. It runs in the full profile only.
+      # CRAN's NOSUGGESTS and NOLD flavours, full profile only: zugrpc has
+      # Suggests (testthat, withr) and parses lengths and grpc-timeout.
+      nosuggests: true
+      nold: true
       runners: |
         [{"os": "macos-latest", "r": "release"},
          {"os": "windows-latest", "r": "release"},
