@@ -158,3 +158,28 @@ test_that("check_method() wants /service/method", {
   }
   expect_error(check_method(c("/a/b", "/c/d")), class = "zugrpc_error_argument")
 })
+
+test_that("metadata_encode() refuses HTTP/2 connection-specific headers", {
+  # RFC 9113 §8.2.2 makes these malformed on HTTP/2; host is :authority.
+  for (name in c(
+    "connection",
+    "keep-alive",
+    "proxy-connection",
+    "transfer-encoding",
+    "upgrade",
+    "host",
+    "Host"
+  )) {
+    expect_error(
+      metadata_encode(stats::setNames(list("x"), name)),
+      class = "zugrpc_error_argument"
+    )
+  }
+})
+
+test_that("the reserved names are the same going out and coming in", {
+  nms <- c(":path", "grpc-status", "te", "content-type", "connection", "x")
+  expect_identical(is_reserved_name(nms), c(rep(TRUE, 5), FALSE))
+  fields <- stats::setNames(as.character(seq_along(nms)), nms)
+  expect_named(user_metadata(fields), "x")
+})

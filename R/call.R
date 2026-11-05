@@ -13,7 +13,9 @@
 #' @param request The encoded request message, a raw vector.
 #' @param metadata Request metadata: a named character vector, or a named
 #'   list whose `-bin` entries are raw vectors. Names are lower-cased. Names
-#'   starting with `grpc-`, `te` and `content-type` are reserved.
+#'   starting with `grpc-` or `:` are reserved, and so are `te`,
+#'   `content-type`, `host` and the connection headers HTTP/2 forbids, such
+#'   as `connection`. A `user-agent` is sent before zugrpc's own.
 #' @param deadline Seconds from now, or an absolute `POSIXct`, by which the
 #'   call must finish. It is sent to the server as `grpc-timeout` and also
 #'   bounds the request locally. `NULL` sets no deadline.
@@ -96,10 +98,17 @@ build_request <- function(channel, method, request, metadata, deadline) {
     status_abort("DEADLINE_EXCEEDED", "deadline exceeded", method = method)
   }
   timeout <- if (!is.null(seconds)) grpc_timeout(seconds)
+  metadata <- metadata_merge(channel$headers, metadata_encode(metadata))
+  # A caller's user-agent goes before zugrpc's, as other gRPC clients do.
+  agent <- user_agent()
+  if ("user-agent" %in% names(metadata)) {
+    agent <- paste(metadata[["user-agent"]], agent)
+    metadata <- metadata[names(metadata) != "user-agent"]
+  }
   headers <- request_headers(
-    metadata = metadata_merge(channel$headers, metadata_encode(metadata)),
+    metadata = metadata,
     timeout = timeout,
-    user_agent = user_agent()
+    user_agent = agent
   )
   req <- zuhttp::zu_request("POST", paste0(channel$origin, method))
   req <- do.call(zuhttp::zu_headers, c(list(req), as.list(headers)))
@@ -256,9 +265,5 @@ lower_names <- function(fields) {
 # Metadata as the caller sees it: the reserved fields of the protocol are
 # not metadata (§6.2, §6.4).
 user_metadata <- function(fields) {
-  nms <- names(fields)
-  keep <- !(startsWith(nms, ":") |
-    startsWith(nms, "grpc-") |
-    nms %in% c("content-type", "te"))
-  fields[keep]
+  fields[!is_reserved_name(names(fields))]
 }

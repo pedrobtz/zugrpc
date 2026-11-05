@@ -13,8 +13,9 @@
 #' @param url The server, as `http://host:port` or `https://host:port`. No
 #'   path, query or user information.
 #' @param headers Metadata sent on every call: a named character vector or a
-#'   named list, as `metadata` in [grpc_call()]. A call's own metadata
-#'   replaces a channel header of the same name.
+#'   named list, as `metadata` in [grpc_call()], with the same reserved
+#'   names. A call's own metadata replaces a channel header of the same
+#'   name.
 #' @param tls Certificate trust settings from [zuhttp::zu_tls()], for an
 #'   `https://` URL.
 #' @param keepalive HTTP/2 keepalive from [grpc_keepalive()], or `NULL` for

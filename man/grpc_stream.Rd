@@ -15,7 +15,9 @@ grpc_stream(channel, method, request, metadata = NULL, deadline = NULL)
 
 \item{metadata}{Request metadata: a named character vector, or a named
 list whose \code{-bin} entries are raw vectors. Names are lower-cased. Names
-starting with \verb{grpc-}, \code{te} and \code{content-type} are reserved.}
+starting with \verb{grpc-} or \code{:} are reserved, and so are \code{te},
+\code{content-type}, \code{host} and the connection headers HTTP/2 forbids, such
+as \code{connection}. A \code{user-agent} is sent before zugrpc's own.}
 
 \item{deadline}{Seconds from now, or an absolute \code{POSIXct}, by which the
 whole stream must end. It is sent as \code{grpc-timeout}. Locally it is

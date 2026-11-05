@@ -18,9 +18,7 @@ metadata_encode <- function(metadata) {
       sprintf("Invalid metadata name '%s'.", nms[bad][1L])
     )
   }
-  reserved <- startsWith(nms, ":") |
-    startsWith(nms, "grpc-") |
-    nms %in% c("te", "content-type")
+  reserved <- is_reserved_name(nms)
   if (any(reserved)) {
     zugrpc_abort(
       "argument",
@@ -33,6 +31,25 @@ metadata_encode <- function(metadata) {
     character(1)
   )
   stats::setNames(values, nms)
+}
+
+# Names that belong to the protocol, not to metadata (§6.2, §6.4): HTTP/2
+# pseudo-headers, the grpc- prefix, te and content-type, and the
+# connection-specific headers HTTP/2 forbids (RFC 9113 §8.2.2), with host,
+# which :authority replaces. The same rule filters received metadata.
+reserved_names <- c(
+  "te",
+  "content-type",
+  "connection",
+  "keep-alive",
+  "proxy-connection",
+  "transfer-encoding",
+  "upgrade",
+  "host"
+)
+
+is_reserved_name <- function(nms) {
+  startsWith(nms, ":") | startsWith(nms, "grpc-") | nms %in% reserved_names
 }
 
 metadata_value <- function(name, value) {

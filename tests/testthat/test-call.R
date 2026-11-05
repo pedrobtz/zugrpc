@@ -390,3 +390,16 @@ test_that("a status condition carries the response's metadata", {
   )
   expect_identical(cnd$headers, list("x-h" = "1"))
 })
+
+test_that("a caller's user-agent goes before zugrpc's", {
+  m <- mock_channel(grpc_response(), headers = c("user-agent" = "chan/1"))
+  grpc_call(m$channel, "/a.B/C", raw())
+  grpc_call(m$channel, "/a.B/C", raw(), metadata = c("User-Agent" = "me/2"))
+  ua <- vapply(
+    m$seen$requests,
+    function(req) sent_header(req, "user-agent"),
+    character(1)
+  )
+  expect_match(ua[1], "^chan/1 zugrpc/[0-9.]+ zuhttp/")
+  expect_match(ua[2], "^me/2 zugrpc/[0-9.]+ zuhttp/")
+})
