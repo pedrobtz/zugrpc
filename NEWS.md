@@ -19,6 +19,11 @@
   longer referenced is cancelled when it is garbage-collected.
 * A call whose deadline has already passed fails with `DEADLINE_EXCEEDED`
   without being sent.
+* `grpc_keepalive()` sets HTTP/2 keepalive for a channel. By default a
+  connection idle for 60 seconds is checked with a PING before its next
+  call, as Spark Connect's Python client does.
+* Each call no longer spends about a millisecond rebuilding the user-agent
+  string.
 * `zugrpc_info()` reports the zuhttp version, whether it speaks HTTP/2, and
   its TLS backend.
 * Failures below gRPC raise `zugrpc_error_transport`, which is also
