@@ -71,15 +71,15 @@ test_that("every non-OK status raises its own class, from Trailers-Only", {
     name <- codes$name[codes$code == code]
     cnd <- expect_error(
       grpc_call(m$channel, fx$request$method, fx$request$body[-(1:5)]),
-      class = paste0("zugrpc_error_", tolower(name))
+      class = paste0("zugrpc_error_", tolower(name)),
+      info = name
     )
-    expect_s3_class(cnd, "zugrpc_error_status")
-    expect_s3_class(cnd, "zugrpc_error")
-    expect_identical(cnd$grpc_status, name)
-    expect_identical(cnd$grpc_code, code)
-    expect_identical(cnd$grpc_message, sprintf("status %d", code))
-    expect_identical(cnd$http_status, 200L)
-    expect_identical(cnd$method, fx$request$method)
+    expect_s3_class(cnd, c("zugrpc_error_status", "zugrpc_error"))
+    expect_identical(cnd$grpc_status, name, info = name)
+    expect_identical(cnd$grpc_code, code, info = name)
+    expect_identical(cnd$grpc_message, sprintf("status %d", code), info = name)
+    expect_identical(cnd$http_status, 200L, info = name)
+    expect_identical(cnd$method, fx$request$method, info = name)
   }
 })
 
@@ -210,9 +210,10 @@ test_that("a non-200 HTTP status with no grpc-status maps to a gRPC status", {
     ))
     cnd <- expect_error(
       grpc_call(m$channel, "/a.B/C", raw()),
-      class = paste0("zugrpc_error_", cases[[http]])
+      class = paste0("zugrpc_error_", cases[[http]]),
+      info = http
     )
-    expect_identical(cnd$http_status, as.integer(http))
+    expect_identical(cnd$http_status, as.integer(http), info = http)
   }
 })
 
@@ -413,4 +414,18 @@ test_that("a header grpc-status counts only when there is no body", {
     trailers = c("grpc-status" = "0")
   ))
   expect_identical(grpc_call(m$channel, "/a.B/C", raw())$message, as.raw(1))
+})
+
+test_that("content-type is matched case-insensitively, and must be there", {
+  m <- mock_channel(grpc_response(
+    headers = c("content-type" = "Application/GRPC+proto")
+  ))
+  expect_identical(grpc_call(m$channel, "/a.B/C", raw())$status, "OK")
+
+  m <- mock_channel(grpc_response(headers = c("x-h" = "1")))
+  cnd <- expect_error(
+    grpc_call(m$channel, "/a.B/C", raw()),
+    class = "zugrpc_error_protocol"
+  )
+  expect_null(cnd$content_type)
 })

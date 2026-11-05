@@ -32,8 +32,8 @@ test_that("status_from_header() maps every code to its name", {
   codes <- grpc_status_codes()
   for (i in seq_len(nrow(codes))) {
     st <- status_from_header(as.character(codes$code[i]))
-    expect_identical(st$name, codes$name[i])
-    expect_identical(st$code, codes$code[i])
+    expect_identical(st$name, codes$name[i], info = codes$name[i])
+    expect_identical(st$code, codes$code[i], info = codes$name[i])
   }
 })
 

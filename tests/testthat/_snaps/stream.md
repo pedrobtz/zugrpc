@@ -22,3 +22,14 @@
       <zugrpc_stream> /a.B/C
         state: cancelled
 
+# a stream that failed without a status prints as failed
+
+    Code
+      m <- mock_channel(grpc_response(body = wire_message(as.raw(1:9))[1:8]))
+      st <- grpc_stream(m$channel, "/a.B/C", raw())
+      try(st$next_message(), silent = TRUE)
+      print(st)
+    Output
+      <zugrpc_stream> /a.B/C
+        state: ended, failed
+

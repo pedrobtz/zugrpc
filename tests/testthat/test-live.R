@@ -229,3 +229,47 @@ test_that("live: a plain HTTP/2 server is a protocol error", {
     class = "zugrpc_error_protocol"
   )
 })
+
+test_that("live: a stall after part of the deadline overruns it (zuhttp#173)", {
+  # Pins the known overrun of design §6.6: each wait is bounded by the whole
+  # deadline afresh, so a stall that starts 0.6 s into a 1 s deadline fails
+  # at about 1.6 s. When zuhttp#173 makes the bound exact this fails at about
+  # 1 s; then tighten it and update §6.6.
+  ch <- grpc_channel(live_server("ZU_GRPC_TEST_STATUS"))
+  withr::defer(grpc_close(ch))
+  t0 <- Sys.time()
+  st <- grpc_stream(ch, "/zugrpc.test.Status/SlowStall", raw(), deadline = 1)
+  expect_identical(st$next_message(), as.raw(c(0x0a, 0x01, 0x01)))
+  expect_error(st$next_message(), class = "zugrpc_error_deadline_exceeded")
+  elapsed <- as.numeric(Sys.time() - t0, units = "secs")
+  expect_gt(elapsed, 1.4)
+  expect_lt(elapsed, 3)
+})
+
+test_that("live: a stream reset partway through its body is a transport error", {
+  ch <- grpc_channel(live_server("ZU_H2_TEST_SERVER"))
+  withr::defer(grpc_close(ch))
+  st <- grpc_stream(ch, "/zugrpc.test.Reset/Mid", raw(), deadline = 10)
+  expect_identical(st$next_message(), as.raw(7))
+  cnd <- expect_error(st$next_message(), class = "zugrpc_error_transport")
+  expect_identical(cnd$method, "/zugrpc.test.Reset/Mid")
+  expect_error(st$next_message(), class = "zugrpc_error_transport")
+  expect_length(ls(ch$streams), 0L)
+})
+
+test_that("live: a stream's whole body may exceed max_message", {
+  # Each message is under the limit; together they are far over it.
+  ch <- grpc_channel(live_server("ZU_GRPC_TEST_SERVER"), max_message = 1000)
+  withr::defer(grpc_close(ch))
+  st <- grpc_stream(
+    ch,
+    paste0(interop, "StreamingOutputCall"),
+    streaming_request(rep(900, 20)),
+    deadline = 10
+  )
+  got <- c()
+  while (!is.null(m <- st$next_message())) {
+    got <- c(got, payload_size(m))
+  }
+  expect_identical(got, rep(900, 20))
+})

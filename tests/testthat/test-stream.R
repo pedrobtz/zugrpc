@@ -445,3 +445,29 @@ test_that("a stream's status with no message falls back to its description", {
   cnd <- expect_error(st$next_message(), class = "zugrpc_error_internal")
   expect_identical(cnd$grpc_message, "missing grpc-status in trailers")
 })
+
+test_that("a read asks for the rest of a large message, at least 64 KiB", {
+  sizes <- c()
+  local_mocked_bindings(
+    resp_read = function(res, n) {
+      sizes <<- c(sizes, n)
+      zuhttp::zu_resp_read(res, min(n, 5))
+    }
+  )
+  m <- mock_channel(grpc_response(body = wire_message(raw(200000))))
+  st <- grpc_stream(m$channel, "/a.B/C", raw())
+  expect_length(st$next_message(), 200000L)
+  # The first read is the default; once the prefix is in, the rest of the
+  # message, less what is already read.
+  expect_identical(sizes[1:2], c(65536, 200005 - 5))
+  expect_true(all(sizes >= 65536))
+})
+
+test_that("a stream that failed without a status prints as failed", {
+  expect_snapshot({
+    m <- mock_channel(grpc_response(body = wire_message(as.raw(1:9))[1:8]))
+    st <- grpc_stream(m$channel, "/a.B/C", raw())
+    try(st$next_message(), silent = TRUE)
+    print(st)
+  })
+})

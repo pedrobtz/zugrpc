@@ -56,7 +56,11 @@ test_that("metadata_encode() accepts a named character vector", {
 test_that("metadata_encode() refuses reserved and grpc- names", {
   for (nm in c("grpc-foo", "grpc-timeout", "te", "content-type", ":path")) {
     md <- stats::setNames(list("x"), nm)
-    expect_error(metadata_encode(md), class = "zugrpc_error_argument")
+    expect_error(
+      metadata_encode(md),
+      class = "zugrpc_error_argument",
+      info = nm
+    )
   }
 })
 
@@ -172,7 +176,8 @@ test_that("metadata_encode() refuses HTTP/2 connection-specific headers", {
   )) {
     expect_error(
       metadata_encode(stats::setNames(list("x"), name)),
-      class = "zugrpc_error_argument"
+      class = "zugrpc_error_argument",
+      info = name
     )
   }
 })

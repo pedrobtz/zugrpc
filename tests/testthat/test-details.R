@@ -195,3 +195,16 @@ test_that("every class of the design's condition table is raised", {
   )
   expect_error(grpc_channel("nope"), class = "zugrpc_error_argument")
 })
+
+test_that("a Status with no details decodes to an empty list", {
+  # google.rpc.Status: code = 1 (5), message = 2 ("x"); no field 3.
+  status <- as.raw(c(0x08, 0x05, 0x12, 0x01, 0x78))
+  got <- status_details_decode(base64_encode(status))
+  expect_identical(got$code, 5L)
+  expect_identical(got$message, "x")
+  expect_identical(got$details, list())
+})
+
+test_that("a details warning is also a zugrpc_warning", {
+  expect_warning(status_details_decode("!!"), class = "zugrpc_warning")
+})
