@@ -34,7 +34,8 @@ ch <- grpc_channel(
 ## Make a unary call
 
 A unary call sends one request message and returns one response message.
-The request is a raw vector, typically from `zuproto::proto_encode()`.
+The request is a raw vector, typically from
+[`zuproto::proto_encode()`](https://pedrobtz.github.io/zuproto/reference/proto_encode.html).
 The deadline is in seconds, or an absolute `POSIXct`.
 
 ``` r

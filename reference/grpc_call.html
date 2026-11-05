@@ -45,7 +45,7 @@ condition instead of returning."></head><body>
     <div class="ref-description section level2">
     <p>Sends one request message to a method and returns the one response
 message, with the server's initial and trailing metadata. The request is
-already encoded, for example by <code>zuproto::proto_encode()</code>; zugrpc only
+already encoded, for example by <code><a href="https://pedrobtz.github.io/zuproto/reference/proto_encode.html" class="external-link">zuproto::proto_encode()</a></code>; zugrpc only
 frames it. A call that ends with a status other than <code>OK</code> raises a
 condition instead of returning.</p>
     </div>
@@ -96,8 +96,18 @@ metadata, with <code>-bin</code> values as raw vectors) and <code>status</code> 
 <p>A non-<code>OK</code> status raises <code>zugrpc_error_status</code>, whose class also carries
 the status as <code>zugrpc_error_&lt;name&gt;</code>, for example
 <code>zugrpc_error_unavailable</code>. Its fields are <code>grpc_status</code>, <code>grpc_code</code>,
-<code>grpc_message</code>, <code>http_status</code>, <code>method</code>, <code>headers</code> and <code>trailers</code>. A
-response that is not gRPC, or breaks its framing, raises
+<code>grpc_message</code>, <code>details</code>, <code>http_status</code>, <code>method</code>, <code>headers</code> and
+<code>trailers</code>. <code>details</code> is the decoded <code>google.rpc.Status</code> from the
+<code>grpc-status-details-bin</code> trailer, or <code>NULL</code> when there is none: a list of
+<code>code</code>, <code>message</code> and <code>details</code>. Its <code>details</code> are the decoded error
+details, named by type, such as <code>ErrorInfo</code> with its <code>reason</code>, <code>domain</code>
+and <code>metadata</code>. A trailer that does not decode gives a
+<code>zugrpc_warning_details</code> warning, and <code>details</code> is <code>NULL</code>.</p>
+<p>A failure below gRPC, such as a refused connection or a TLS error,
+raises <code>zugrpc_error_transport</code>, which is also <code>zugrpc_error_unavailable</code>.
+The <code>zuhttp</code> condition is its <code>parent</code>. A local timeout is
+<code>DEADLINE_EXCEEDED</code>, and an interrupt raises <code>zugrpc_error_interrupt</code>.
+A response that is not gRPC, or breaks its framing, raises
 <code>zugrpc_error_protocol</code>. See <code><a href="grpc_status_codes.html">grpc_status_codes()</a></code>.</p>
     </div>
 

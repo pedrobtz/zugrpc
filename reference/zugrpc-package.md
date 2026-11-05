@@ -26,3 +26,8 @@ Useful links:
 Authors:
 
 - Pedro Baltazar <pedrobtz@gmail.com> \[copyright holder\]
+
+Other contributors:
+
+- Google LLC (google/rpc protocol definitions in inst/descriptors)
+  \[copyright holder\]

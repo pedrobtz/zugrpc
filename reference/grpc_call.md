@@ -2,9 +2,10 @@
 
 Sends one request message to a method and returns the one response
 message, with the server's initial and trailing metadata. The request is
-already encoded, for example by `zuproto::proto_encode()`; zugrpc only
-frames it. A call that ends with a status other than `OK` raises a
-condition instead of returning.
+already encoded, for example by
+[`zuproto::proto_encode()`](https://pedrobtz.github.io/zuproto/reference/proto_encode.html);
+zugrpc only frames it. A call that ends with a status other than `OK`
+raises a condition instead of returning.
 
 ## Usage
 
@@ -50,9 +51,20 @@ and `trailers` (named lists of the initial and trailing metadata, with
 A non-`OK` status raises `zugrpc_error_status`, whose class also carries
 the status as `zugrpc_error_<name>`, for example
 `zugrpc_error_unavailable`. Its fields are `grpc_status`, `grpc_code`,
-`grpc_message`, `http_status`, `method`, `headers` and `trailers`. A
-response that is not gRPC, or breaks its framing, raises
-`zugrpc_error_protocol`. See
+`grpc_message`, `details`, `http_status`, `method`, `headers` and
+`trailers`. `details` is the decoded `google.rpc.Status` from the
+`grpc-status-details-bin` trailer, or `NULL` when there is none: a list
+of `code`, `message` and `details`. Its `details` are the decoded error
+details, named by type, such as `ErrorInfo` with its `reason`, `domain`
+and `metadata`. A trailer that does not decode gives a
+`zugrpc_warning_details` warning, and `details` is `NULL`.
+
+A failure below gRPC, such as a refused connection or a TLS error,
+raises `zugrpc_error_transport`, which is also
+`zugrpc_error_unavailable`. The `zuhttp` condition is its `parent`. A
+local timeout is `DEADLINE_EXCEEDED`, and an interrupt raises
+`zugrpc_error_interrupt`. A response that is not gRPC, or breaks its
+framing, raises `zugrpc_error_protocol`. See
 [`grpc_status_codes()`](https://pedrobtz.github.io/zugrpc/reference/grpc_status_codes.md).
 
 ## Examples

@@ -4,6 +4,9 @@
 
 - **Pedro Baltazar**. Author, maintainer, copyright holder.
 
+- **Google LLC**. Copyright holder.  
+  google/rpc protocol definitions in inst/descriptors
+
 ## Citation
 
 Source:

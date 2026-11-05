@@ -90,7 +90,7 @@ URL negotiates HTTP/2 over TLS.</p>
 </h2>
 <p>A unary call sends one request message and returns one response
 message. The request is a raw vector, typically from
-<code>zuproto::proto_encode()</code>. The deadline is in seconds, or an
+<code><a href="https://pedrobtz.github.io/zuproto/reference/proto_encode.html" class="external-link">zuproto::proto_encode()</a></code>. The deadline is in seconds, or an
 absolute <code>POSIXct</code>.</p>
 <div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">res</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/grpc_call.html">grpc_call</a></span><span class="op">(</span></span>
@@ -120,7 +120,7 @@ read.</p>
 <span><span class="co"># Open: should $next_message() take a timeout of its own, or is the call</span></span>
 <span><span class="co"># deadline enough?</span></span>
 <span><span class="kw">while</span> <span class="op">(</span><span class="op">!</span><span class="fu"><a href="https://rdrr.io/r/base/NULL.html" class="external-link">is.null</a></span><span class="op">(</span><span class="va">m</span> <span class="op">&lt;-</span> <span class="va">st</span><span class="op">$</span><span class="fu">next_message</span><span class="op">(</span><span class="op">)</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
-<span>  <span class="fu">zuproto</span><span class="fu">::</span><span class="fu">proto_decode</span><span class="op">(</span><span class="va">m</span>, <span class="va">type</span>, <span class="va">pool</span><span class="op">)</span></span>
+<span>  <span class="fu">zuproto</span><span class="fu">::</span><span class="fu"><a href="https://pedrobtz.github.io/zuproto/reference/proto_decode.html" class="external-link">proto_decode</a></span><span class="op">(</span><span class="va">m</span>, <span class="va">type</span>, <span class="va">pool</span><span class="op">)</span></span>
 <span><span class="op">}</span></span>
 <span><span class="va">st</span><span class="op">$</span><span class="fu">trailers</span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="va">st</span><span class="op">$</span><span class="fu">status</span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
