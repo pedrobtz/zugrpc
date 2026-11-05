@@ -36,6 +36,10 @@
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="0.0.0.9000" id="zugrpc-0009000">zugrpc 0.0.0.9000<a class="anchor" aria-label="anchor" href="#zugrpc-0009000"></a></h2>
 <ul><li>
+<code><a href="../reference/grpc_channel.html">grpc_channel()</a></code> opens a channel to a gRPC server over cleartext HTTP/2 (<code>http://</code>) or TLS (<code>https://</code>). It can build on a <code><a href="https://pedrobtz.github.io/zuhttp/reference/zu_client.html" class="external-link">zuhttp::zu_client()</a></code> you supply, so proxies, TLS settings and test transports carry over. <code><a href="../reference/grpc_close.html">grpc_close()</a></code> closes it.</li>
+<li>
+<code><a href="../reference/grpc_call.html">grpc_call()</a></code> makes a unary call. It returns the response message with its initial and trailing metadata, and raises <code>zugrpc_error_status</code>, with a class per status code, when the call fails. Responses that are not gRPC or break its framing raise <code>zugrpc_error_protocol</code>.</li>
+<li>
 <code><a href="../reference/grpc_status_codes.html">grpc_status_codes()</a></code> lists the 17 gRPC status codes.</li>
 <li>The gRPC wire format, internal for now: message framing, metadata with <code>-bin</code> values in base64, the <code>grpc-timeout</code> header, <code>grpc-status</code> and <code>grpc-message</code> decoding, and the HTTP-status fallback.</li>
 </ul></div>

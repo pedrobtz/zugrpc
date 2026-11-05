@@ -75,11 +75,11 @@ and its status. Calls can be unary or server-streaming.</p>
 URL is cleartext HTTP/2, for a local server. An <code>https://</code>
 URL negotiates HTTP/2 over TLS.</p>
 <div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">ch</span> <span class="op">&lt;-</span> <span class="fu">grpc_channel</span><span class="op">(</span><span class="st">"http://localhost:15002"</span><span class="op">)</span></span>
+<code class="sourceCode R"><span><span class="va">ch</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/grpc_channel.html">grpc_channel</a></span><span class="op">(</span><span class="st">"http://localhost:15002"</span><span class="op">)</span></span>
 <span></span>
-<span><span class="va">ch</span> <span class="op">&lt;-</span> <span class="fu">grpc_channel</span><span class="op">(</span></span>
+<span><span class="va">ch</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/grpc_channel.html">grpc_channel</a></span><span class="op">(</span></span>
 <span>  <span class="st">"https://spark.example.org:443"</span>,</span>
-<span>  tls <span class="op">=</span> <span class="fu">zuhttp</span><span class="fu">::</span><span class="fu">zu_tls</span><span class="op">(</span>ca_file <span class="op">=</span> <span class="cn">NULL</span><span class="op">)</span>,</span>
+<span>  tls <span class="op">=</span> <span class="fu">zuhttp</span><span class="fu">::</span><span class="fu"><a href="https://pedrobtz.github.io/zuhttp/reference/zu_tls.html" class="external-link">zu_tls</a></span><span class="op">(</span>ca_file <span class="op">=</span> <span class="cn">NULL</span><span class="op">)</span>,</span>
 <span>  headers <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>authorization <span class="op">=</span> <span class="st">"Bearer ..."</span><span class="op">)</span>,</span>
 <span>  keepalive <span class="op">=</span> <span class="fu">grpc_keepalive</span><span class="op">(</span>time <span class="op">=</span> <span class="fl">60</span>, timeout <span class="op">=</span> <span class="fl">20</span><span class="op">)</span>,</span>
 <span>  max_message <span class="op">=</span> <span class="fl">128</span> <span class="op">*</span> <span class="fl">1024</span><span class="op">^</span><span class="fl">2</span></span>
@@ -93,8 +93,7 @@ message. The request is a raw vector, typically from
 <code>zuproto::proto_encode()</code>. The deadline is in seconds, or an
 absolute <code>POSIXct</code>.</p>
 <div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="co"># Open: whether grpc_call() returns a plain list or an S3 object with accessors</span></span>
-<span><span class="va">res</span> <span class="op">&lt;-</span> <span class="fu">grpc_call</span><span class="op">(</span></span>
+<code class="sourceCode R"><span><span class="va">res</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/grpc_call.html">grpc_call</a></span><span class="op">(</span></span>
 <span>  <span class="va">ch</span>, <span class="st">"/spark.connect.SparkConnectService/AnalyzePlan"</span>,</span>
 <span>  request <span class="op">=</span> <span class="va">req_bytes</span>,</span>
 <span>  metadata <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"x-user-agent"</span> <span class="op">=</span> <span class="st">"zuspark"</span><span class="op">)</span>,</span>
@@ -138,7 +137,7 @@ status, so you can catch one code. The <code>details</code> field holds
 the decoded <code>google.rpc.Status</code>.</p>
 <div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/conditions.html" class="external-link">tryCatch</a></span><span class="op">(</span></span>
-<span>  <span class="fu">grpc_call</span><span class="op">(</span><span class="va">ch</span>, <span class="st">"/spark.connect.SparkConnectService/AnalyzePlan"</span>,</span>
+<span>  <span class="fu"><a href="../reference/grpc_call.html">grpc_call</a></span><span class="op">(</span><span class="va">ch</span>, <span class="st">"/spark.connect.SparkConnectService/AnalyzePlan"</span>,</span>
 <span>            request <span class="op">=</span> <span class="va">req_bytes</span><span class="op">)</span>,</span>
 <span>  zugrpc_error_unavailable <span class="op">=</span> <span class="kw">function</span><span class="op">(</span><span class="va">cnd</span><span class="op">)</span> <span class="op">{</span></span>
 <span>    <span class="va">cnd</span><span class="op">$</span><span class="va">message</span></span>
@@ -195,7 +194,7 @@ with.</p>
 <code>zugrpc_info()</code> reports the zuhttp version, whether it offers
 HTTP/2 and its TLS backend.</p>
 <div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="fu">grpc_close</span><span class="op">(</span><span class="va">ch</span><span class="op">)</span></span>
+<code class="sourceCode R"><span><span class="fu"><a href="../reference/grpc_close.html">grpc_close</a></span><span class="op">(</span><span class="va">ch</span><span class="op">)</span></span>
 <span><span class="fu">zugrpc_info</span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
 </div>
 <div class="section level2">

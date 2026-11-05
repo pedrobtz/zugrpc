@@ -39,7 +39,6 @@ The deadline is in seconds, or an absolute `POSIXct`.
 
 ``` r
 
-# Open: whether grpc_call() returns a plain list or an S3 object with accessors
 res <- grpc_call(
   ch, "/spark.connect.SparkConnectService/AnalyzePlan",
   request = req_bytes,
