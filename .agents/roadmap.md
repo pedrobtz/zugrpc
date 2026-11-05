@@ -242,7 +242,9 @@ r-actions, so this stage turns them on in the `R-CMD-check` caller.
 and does not apply: zugrpc has no `src/` (D1, D7). The issue recorded no
 full-only failures, and the full run on Stage 5's merge
 ([`cf920bb`](https://github.com/pedrobtz/zugrpc/commit/cf920bb39f646d4a7e4354c69b7fedb2612e4757))
-was green, `live.yaml` included.
+was green, `live.yaml` included. The first `nosuggests` run failed:
+`tests/testthat.R` called `library(testthat)` with testthat absent, so it
+now runs the suite only when testthat is installed.
 
 **Exit criteria.**
 

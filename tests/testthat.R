@@ -6,7 +6,11 @@
 # * https://r-pkgs.org/testing-design.html#sec-tests-files-overview
 # * https://testthat.r-lib.org/articles/special-files.html
 
-library(testthat)
-library(zugrpc)
+# testthat is a suggested package, so the tests run only where it is
+# installed: CRAN's NOSUGGESTS check has it absent.
+if (requireNamespace("testthat", quietly = TRUE)) {
+  library(testthat)
+  library(zugrpc)
 
-test_check("zugrpc")
+  test_check("zugrpc")
+}
