@@ -1,3 +1,10 @@
+# grpc_keepalive() validates and prints
+
+    Code
+      print(grpc_keepalive(time = 30, timeout = 10))
+    Output
+      <zugrpc_keepalive> PING after 30s idle, answer within 10s
+
 # a channel prints its authority, transport and state
 
     Code
@@ -23,11 +30,4 @@
         transport: TLS, ALPN h2
         state:     open
         streams:   0 open
-
-# grpc_keepalive() validates and prints
-
-    Code
-      print(grpc_keepalive(time = 30, timeout = 10))
-    Output
-      <zugrpc_keepalive> PING after 30s idle, answer within 10s
 

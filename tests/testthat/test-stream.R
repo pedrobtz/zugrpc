@@ -1,7 +1,5 @@
 # Recorded and hand-built responses ---------------------------------------
 
-stream_body <- function(...) do.call(c, lapply(list(...), wire_message))
-
 test_that("a stream yields each message, then NULL, then the status", {
   msgs <- list(as.raw(1:3), raw(), as.raw(rep(7, 70000)))
   m <- mock_channel(grpc_response(

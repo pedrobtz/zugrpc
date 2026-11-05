@@ -93,3 +93,28 @@ payload_size <- function(msg) {
   inner <- read_varint(outer[2] + 1L)
   inner[1]
 }
+
+# The grpc.testing service's method prefix.
+interop <- "/grpc.testing.TestService/"
+
+# Spark Connect, for test-spark.R.
+spark_pool <- function() {
+  path <- test_path("fixtures", "spark", "spark-connect.binpb")
+  skip_if_not(file.exists(path), "the Spark Connect descriptors are absent")
+  zuproto::proto_pool(path)
+}
+
+spark_execute <- function(query, pool) {
+  zuproto::proto_encode(
+    list(
+      session_id = "6ec0bd7f-11c0-43da-975e-2a8ad9ebae0b",
+      user_context = list(user_id = "zugrpc"),
+      client_type = "zugrpc-test",
+      plan = list(root = list(sql = list(query = query)))
+    ),
+    "spark.connect.ExecutePlanRequest",
+    pool
+  )
+}
+
+execute_plan <- "/spark.connect.SparkConnectService/ExecutePlan"

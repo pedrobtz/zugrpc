@@ -1,7 +1,5 @@
 # Against real servers (design §10); see helper-live.R for the variables.
 
-interop <- "/grpc.testing.TestService/"
-
 test_that("live: unary calls over h2c, with metadata both ways", {
   ch <- grpc_channel(live_server("ZU_GRPC_TEST_SERVER"))
   withr::defer(grpc_close(ch))
