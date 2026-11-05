@@ -102,9 +102,10 @@ build_request <- function(channel, method, request, metadata, deadline) {
   req <- zuhttp::zu_request("POST", paste0(channel$origin, method))
   req <- do.call(zuhttp::zu_headers, c(list(req), as.list(headers)))
   req <- zuhttp::zu_body_raw(req, body, type = "application/grpc+proto")
-  if (!is.null(seconds)) {
-    req <- zuhttp::zu_req_timeout(req, total = seconds)
-  }
+  # Without a deadline the request must not keep zuhttp's default timeout,
+  # and zuhttp reads a bound that rounds to 0 ms as "its default" too.
+  local_bound <- if (is.null(seconds)) Inf else max(seconds, 0.001)
+  req <- zuhttp::zu_req_timeout(req, total = local_bound)
   list(
     request = req,
     deadline_at = if (!is.null(seconds)) Sys.time() + seconds

@@ -114,12 +114,28 @@ test_that("a deadline becomes grpc-timeout and the request's timeout", {
   grpc_call(m$channel, "/a.B/C", raw(), deadline = 1.5)
   req <- m$seen$requests[[1L]]
   expect_identical(sent_header(req, "grpc-timeout"), "1500000u")
-  expect_identical(req$policy$timeout, 1.5)
+  expect_identical(request_timeout(req), 1.5)
 
   expect_error(
     grpc_call(m$channel, "/a.B/C", raw(), deadline = -1),
     class = "zugrpc_error_argument"
   )
+})
+
+test_that("no deadline sets no local timeout, not zuhttp's default", {
+  m <- mock_channel(grpc_response())
+  grpc_call(m$channel, "/a.B/C", raw())
+  grpc_stream(m$channel, "/a.B/C", raw())
+  for (req in m$seen$requests) {
+    expect_identical(request_timeout(req), Inf)
+  }
+})
+
+test_that("a deadline under a millisecond still bounds the request", {
+  # zuhttp counts in whole milliseconds and reads 0 as "its default".
+  m <- mock_channel(grpc_response())
+  grpc_call(m$channel, "/a.B/C", raw(), deadline = 0.0004)
+  expect_identical(request_timeout(m$seen$requests[[1L]]), 0.001)
 })
 
 test_that("call metadata replaces a channel header of the same name", {
