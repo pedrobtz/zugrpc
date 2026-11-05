@@ -65,8 +65,6 @@ st <- grpc_stream(
   request = req_bytes, deadline = 600
 )
 st$headers()
-# Open: should $next_message() take a timeout of its own, or is the call
-# deadline enough?
 while (!is.null(m <- st$next_message())) {
   zuproto::proto_decode(m, type, pool)
 }
@@ -147,8 +145,10 @@ grpc_status_codes()
 
 ## Close and inspect
 
-Closing a channel cancels its open streams. `zugrpc_info()` reports the
-zuhttp version, whether it offers HTTP/2 and its TLS backend.
+Closing a channel cancels its open streams.
+[`zugrpc_info()`](https://pedrobtz.github.io/zugrpc/reference/zugrpc_info.md)
+reports the zuhttp version, whether it offers HTTP/2 and its TLS
+backend.
 
 ``` r
 

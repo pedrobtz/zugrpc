@@ -40,6 +40,11 @@
 <li>
 <code><a href="../reference/grpc_call.html">grpc_call()</a></code> makes a unary call. It returns the response message with its initial and trailing metadata, and raises <code>zugrpc_error_status</code>, with a class per status code, when the call fails. Responses that are not gRPC or break its framing raise <code>zugrpc_error_protocol</code>.</li>
 <li>A failed call’s condition carries <code>details</code>, the <code>google.rpc.Status</code> decoded from the <code>grpc-status-details-bin</code> trailer, with each error detail such as <code>ErrorInfo</code> unpacked. A trailer that does not decode is a <code>zugrpc_warning_details</code> warning, and the status is kept.</li>
+<li>
+<code><a href="../reference/grpc_stream.html">grpc_stream()</a></code> makes a server-streaming call. Its <code>$next_message()</code> returns one message at a time as it arrives, so the server sends only as fast as you read. <code>$cancel()</code> stops the call and keeps the connection. <code><a href="../reference/grpc_close.html">grpc_close()</a></code> cancels a channel’s open streams, and a stream that is no longer referenced is cancelled when it is garbage-collected.</li>
+<li>A call whose deadline has already passed fails with <code>DEADLINE_EXCEEDED</code> without being sent.</li>
+<li>
+<code><a href="../reference/zugrpc_info.html">zugrpc_info()</a></code> reports the zuhttp version, whether it speaks HTTP/2, and its TLS backend.</li>
 <li>Failures below gRPC raise <code>zugrpc_error_transport</code>, which is also <code>zugrpc_error_unavailable</code>. A timeout is <code>DEADLINE_EXCEEDED</code>, and an interrupt raises <code>zugrpc_error_interrupt</code>.</li>
 <li>
 <code><a href="../reference/grpc_status_codes.html">grpc_status_codes()</a></code> lists the 17 gRPC status codes.</li>

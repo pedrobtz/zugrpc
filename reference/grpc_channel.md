@@ -72,5 +72,6 @@ ch
 #> <zugrpc_channel> localhost:50051
 #>   transport: cleartext HTTP/2 (h2c)
 #>   state:     open
+#>   streams:   0 open
 grpc_close(ch)
 ```

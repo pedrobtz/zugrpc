@@ -44,7 +44,7 @@
 </div>
 <div class="section level2">
 <h2 id="current-state">Current state<a class="anchor" aria-label="anchor" href="#current-state"></a></h2>
-<p>Scaffolded 2026-11-03 with <code>create-pkg.sh</code>; no functionality yet. The roadmap in <code>.agents/roadmap.md</code> takes it to v0.1.0.</p>
+<p>Scaffolded 2026-11-03 with <code>create-pkg.sh</code>. Stages 0 to 4 of <code>.agents/roadmap.md</code> are in: framing, unary and server-streaming calls, status details and the condition classes, live-tested over h2c and TLS. The roadmap takes it the rest of the way to v0.1.0.</p>
 </div>
 <div class="section level2">
 <h2 id="stage-tracking">Stage tracking<a class="anchor" aria-label="anchor" href="#stage-tracking"></a></h2>
@@ -82,8 +82,18 @@
 </div>
 <div class="section level2">
 <h2 id="architecture">Architecture<a class="anchor" aria-label="anchor" href="#architecture"></a></h2>
-<p>To be written as stages land; see <code>.agents/design.md</code>. There is no native layer: the scaffold has no <code>src/</code>, and the design keeps it that way.</p>
-</div>
+<p>See <code>.agents/design.md</code> §4. There is no native layer: no <code>src/</code>, and the design keeps it that way.</p>
+<ul><li>
+<code>R/frame.R</code>, <code>R/metadata.R</code>, <code>R/timeout.R</code>, <code>R/status.R</code>: pure wire format, no I/O.</li>
+<li>
+<code>R/channel.R</code>: <code><a href="reference/grpc_channel.html">grpc_channel()</a></code> derives two zuhttp clients with HTTP/2 required, one for unary calls (<code>max_body</code> bounded) and one for streams.</li>
+<li>
+<code>R/call.R</code>: <code>build_request()</code>, shared with streams, and the unary result, with the status resolution order of design §6.2.</li>
+<li>
+<code>R/stream.R</code>: the pull iterator, with cancellation, the finaliser and the channel’s registry of open responses.</li>
+<li>
+<code>R/details.R</code>, <code>R/conditions.R</code>: <code>google.rpc.Status</code> decoding against <code>inst/descriptors/</code> and every condition constructor.</li>
+</ul></div>
 <div class="section level2">
 <h2 id="invariants-that-are-easy-to-break">Invariants that are easy to break<a class="anchor" aria-label="anchor" href="#invariants-that-are-easy-to-break"></a></h2>
 <p>These are fixed by the design before any code exists.</p>
@@ -98,7 +108,7 @@
 <li>
 <strong>Status codes are condition classes</strong> (D10). Every condition inherits from <code>zugrpc_error</code>, and a failed call carries <code>zugrpc_error_&lt;code&gt;</code>, so callers select by class. Renaming one breaks <code>zuspark</code>’s handlers.</li>
 <li>
-<strong>No network test runs unless <code>ZUGRPC_TEST_SERVER</code> is set</strong> (design §12). CRAN has no gRPC server.</li>
+<strong>No network test runs unless its server’s variable is set</strong> (design §10, §12): <code>ZU_GRPC_TEST_SERVER</code> and the others listed in <code>tests/testthat/helper-live.R</code>, named as in zuhttp’s tests. CRAN has no gRPC server. <code>tools/ci-live.sh</code> starts every server and sets them; <code>.github/workflows/live.yaml</code> runs it on all three platforms.</li>
 </ul></div>
 <div class="section level2">
 <h2 id="testing-conventions">Testing conventions<a class="anchor" aria-label="anchor" href="#testing-conventions"></a></h2>
@@ -111,9 +121,9 @@
 <li>
 <strong>Order independence.</strong> <code>devtools::test(shuffle = TRUE)</code> is part of the definition of done.</li>
 <li>
-<strong>Borrow a conformance suite before writing one.</strong> Mainstream implementations in Python, Java, Go or Node usually ship a test corpus. Use it as an oracle rather than inventing cases by hand. The design (§10) plans <code>grpc-go</code>’s interop server and recorded responses from it; none is in place yet.</li>
+<strong>Borrow a conformance suite before writing one.</strong> Mainstream implementations in Python, Java, Go or Node usually ship a test corpus. Use it as an oracle rather than inventing cases by hand. Here that is <code>grpc-go</code>’s interop server at v1.67.1, live and as the recorded responses in <code>tests/testthat/fixtures/</code> (written by <code>tools/record-fixtures.R</code>), with <code>tools/test-server</code> for what it lacks.</li>
 <li>
-<strong>Helpers live in <code>tests/testthat/helper-*.R</code>.</strong> None yet.</li>
+<strong>Helpers live in <code>tests/testthat/helper-*.R</code>.</strong> <code>helper-replay.R</code> replays fixtures through zuhttp’s mock transport; <code>helper-live.R</code> gates and encodes the live tests.</li>
 <li><strong>Keep the suite inside the CRAN time budget.</strong></li>
 </ul></div>
 <div class="section level2">

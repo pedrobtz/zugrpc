@@ -1,7 +1,9 @@
 # Close a gRPC channel
 
-Closes the channel's idle connections. A call on a closed channel raises
-`zugrpc_error_argument`. Closing a channel twice does nothing.
+Cancels the channel's open streams and closes its idle connections. A
+call on a closed channel raises `zugrpc_error_argument`, and a cancelled
+stream raises `zugrpc_error_cancelled` when it is next read. Closing a
+channel twice does nothing.
 
 ## Usage
 

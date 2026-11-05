@@ -18,6 +18,18 @@
   decoded from the `grpc-status-details-bin` trailer, with each error
   detail such as `ErrorInfo` unpacked. A trailer that does not decode is
   a `zugrpc_warning_details` warning, and the status is kept.
+- [`grpc_stream()`](https://pedrobtz.github.io/zugrpc/reference/grpc_stream.md)
+  makes a server-streaming call. Its `$next_message()` returns one
+  message at a time as it arrives, so the server sends only as fast as
+  you read. `$cancel()` stops the call and keeps the connection.
+  [`grpc_close()`](https://pedrobtz.github.io/zugrpc/reference/grpc_close.md)
+  cancels a channel’s open streams, and a stream that is no longer
+  referenced is cancelled when it is garbage-collected.
+- A call whose deadline has already passed fails with
+  `DEADLINE_EXCEEDED` without being sent.
+- [`zugrpc_info()`](https://pedrobtz.github.io/zugrpc/reference/zugrpc_info.md)
+  reports the zuhttp version, whether it speaks HTTP/2, and its TLS
+  backend.
 - Failures below gRPC raise `zugrpc_error_transport`, which is also
   `zugrpc_error_unavailable`. A timeout is `DEADLINE_EXCEEDED`, and an
   interrupt raises `zugrpc_error_interrupt`.

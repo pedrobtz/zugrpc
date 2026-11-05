@@ -112,13 +112,11 @@ absolute <code>POSIXct</code>.</p>
 <code>NULL</code> at the end. The server only sends more as you
 read.</p>
 <div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">st</span> <span class="op">&lt;-</span> <span class="fu">grpc_stream</span><span class="op">(</span></span>
+<code class="sourceCode R"><span><span class="va">st</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/grpc_stream.html">grpc_stream</a></span><span class="op">(</span></span>
 <span>  <span class="va">ch</span>, <span class="st">"/spark.connect.SparkConnectService/ExecutePlan"</span>,</span>
 <span>  request <span class="op">=</span> <span class="va">req_bytes</span>, deadline <span class="op">=</span> <span class="fl">600</span></span>
 <span><span class="op">)</span></span>
 <span><span class="va">st</span><span class="op">$</span><span class="fu">headers</span><span class="op">(</span><span class="op">)</span></span>
-<span><span class="co"># Open: should $next_message() take a timeout of its own, or is the call</span></span>
-<span><span class="co"># deadline enough?</span></span>
 <span><span class="kw">while</span> <span class="op">(</span><span class="op">!</span><span class="fu"><a href="https://rdrr.io/r/base/NULL.html" class="external-link">is.null</a></span><span class="op">(</span><span class="va">m</span> <span class="op">&lt;-</span> <span class="va">st</span><span class="op">$</span><span class="fu">next_message</span><span class="op">(</span><span class="op">)</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
 <span>  <span class="fu">zuproto</span><span class="fu">::</span><span class="fu"><a href="https://pedrobtz.github.io/zuproto/reference/proto_decode.html" class="external-link">proto_decode</a></span><span class="op">(</span><span class="va">m</span>, <span class="va">type</span>, <span class="va">pool</span><span class="op">)</span></span>
 <span><span class="op">}</span></span>
@@ -191,11 +189,11 @@ with.</p>
 <h2 id="close-and-inspect">Close and inspect<a class="anchor" aria-label="anchor" href="#close-and-inspect"></a>
 </h2>
 <p>Closing a channel cancels its open streams.
-<code>zugrpc_info()</code> reports the zuhttp version, whether it offers
+<code><a href="../reference/zugrpc_info.html">zugrpc_info()</a></code> reports the zuhttp version, whether it offers
 HTTP/2 and its TLS backend.</p>
 <div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/grpc_close.html">grpc_close</a></span><span class="op">(</span><span class="va">ch</span><span class="op">)</span></span>
-<span><span class="fu">zugrpc_info</span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
+<span><span class="fu"><a href="../reference/zugrpc_info.html">zugrpc_info</a></span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
 </div>
 <div class="section level2">
 <h2 id="next">Next<a class="anchor" aria-label="anchor" href="#next"></a>
