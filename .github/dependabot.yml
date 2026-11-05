@@ -1,0 +1,14 @@
+# tools/go.mod builds tools/test-server, a test-only gRPC server that is
+# never shipped (.Rbuildignore) and listens on 127.0.0.1 in CI. It is pinned
+# to grpc-go v1.67.1 on purpose, the version of the interop server the live
+# tests run and of zuhttp's own tests (design §10), so neither version nor
+# security updates are wanted for it.
+version: 2
+updates:
+  - package-ecosystem: gomod
+    directory: /tools
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 0
+    ignore:
+      - dependency-name: "*"
