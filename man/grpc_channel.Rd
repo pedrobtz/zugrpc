@@ -8,6 +8,7 @@ grpc_channel(
   url,
   headers = NULL,
   tls = NULL,
+  keepalive = grpc_keepalive(),
   max_message = 128 * 1024^2,
   client = NULL
 )
@@ -22,6 +23,11 @@ replaces a channel header of the same name.}
 
 \item{tls}{Certificate trust settings from \code{\link[zuhttp:zu_tls]{zuhttp::zu_tls()}}, for an
 \verb{https://} URL.}
+
+\item{keepalive}{HTTP/2 keepalive from \code{\link[=grpc_keepalive]{grpc_keepalive()}}, or \code{NULL} for
+none. The default sends a PING on a connection idle for 60 seconds and
+replaces it if no answer comes within 20, as Spark Connect's Python
+client does.}
 
 \item{max_message}{The largest response message accepted, in bytes. The
 default, 128 MiB, is Spark Connect's. A larger message fails the call
