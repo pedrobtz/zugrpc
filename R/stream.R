@@ -82,7 +82,9 @@ new_stream <- function(channel, res, method, deadline_at) {
   st$http_status <- zuhttp::zu_resp_status(res)
   st$headers <- lower_names(zuhttp::zu_resp_headers(res))
   st$encoding <- field(st$headers, "grpc-encoding")
+  st$user_headers <- metadata_decode(user_metadata(st$headers))
   st$trailers <- NULL
+  st$user_trailers <- NULL
   st$status <- NULL
   st$done <- FALSE
   # Pieces of the body not yet split into messages, concatenated only once
@@ -102,7 +104,7 @@ new_stream <- function(channel, res, method, deadline_at) {
         sprintf("HTTP status %d with no grpc-status", st$http_status),
         http_status = st$http_status,
         method = method,
-        headers = metadata_decode(user_metadata(st$headers)),
+        headers = st$user_headers,
         trailers = list()
       )
     }
@@ -111,15 +113,9 @@ new_stream <- function(channel, res, method, deadline_at) {
 
   reg.finalizer(st, function(e) stream_finish(e, abort = TRUE))
   stream <- list(
-    headers = function() metadata_decode(user_metadata(st$headers)),
+    headers = function() st$user_headers,
     next_message = function() stream_next(st),
-    trailers = function() {
-      if (is.null(st$trailers)) {
-        NULL
-      } else {
-        metadata_decode(user_metadata(st$trailers))
-      }
-    },
+    trailers = function() st$user_trailers,
     status = function() st$status,
     cancel = function() {
       if (!st$done) {
@@ -247,6 +243,7 @@ stream_end <- function(st) {
   trailers <- lower_names(zuhttp::zu_resp_trailers(st$res))
   stream_finish(st, abort = FALSE)
   st$trailers <- trailers
+  st$user_trailers <- metadata_decode(user_metadata(trailers))
   if (st$pending_len > 0) {
     zugrpc_abort(
       "protocol",
@@ -273,8 +270,8 @@ stream_end <- function(st) {
       ),
       http_status = st$http_status,
       method = st$method,
-      headers = metadata_decode(user_metadata(st$headers)),
-      trailers = metadata_decode(user_metadata(trailers))
+      headers = st$user_headers,
+      trailers = st$user_trailers
     )
   }
   invisible()

@@ -40,6 +40,27 @@ status_abort <- function(name, message = "", ..., details = NULL, call = NULL) {
   stop(cnd)
 }
 
+# Received `-bin` metadata that is not base64. The entry is dropped.
+metadata_warning <- function(name, value) {
+  warning(structure(
+    class = c(
+      "zugrpc_warning_metadata",
+      "zugrpc_warning",
+      "warning",
+      "condition"
+    ),
+    list(
+      message = sprintf(
+        "Received metadata '%s' is not base64 and was dropped.",
+        name
+      ),
+      call = NULL,
+      name = name,
+      value = value
+    )
+  ))
+}
+
 # A zuhttp condition raised while performing a call, translated (§6.6, §9).
 # The zuhttp condition is kept as `parent`.
 transport_abort <- function(cnd, method) {

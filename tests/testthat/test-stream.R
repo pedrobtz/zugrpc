@@ -261,3 +261,22 @@ test_that("a stream prints its method and state", {
     print(st2)
   })
 })
+
+test_that("bad -bin metadata on a stream is a warning, never the outcome", {
+  m <- mock_channel(grpc_response(
+    body = stream_body(as.raw(1)),
+    headers = c("content-type" = "application/grpc", "h-bin" = "!!"),
+    trailers = c("grpc-status" = "14", "t-bin" = "!!")
+  ))
+  expect_warning(
+    st <- grpc_stream(m$channel, "/a.B/C", raw()),
+    class = "zugrpc_warning_metadata"
+  )
+  expect_length(st$headers(), 0L)
+  expect_identical(st$next_message(), as.raw(1))
+  expect_warning(
+    cnd <- expect_error(st$next_message(), class = "zugrpc_error_unavailable"),
+    class = "zugrpc_warning_metadata"
+  )
+  expect_length(st$trailers(), 0L)
+})

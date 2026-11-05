@@ -20,7 +20,9 @@
 #'
 #' @return A list with elements `message` (raw, the response message),
 #'   `headers` and `trailers` (named lists of the initial and trailing
-#'   metadata, with `-bin` values as raw vectors) and `status` (`"OK"`).
+#'   metadata, with `-bin` values as raw vectors) and `status` (`"OK"`). A
+#'   `-bin` value holding several, joined by commas, gives one entry each. One
+#'   that is not base64 is dropped with a `zugrpc_warning_metadata` warning.
 #'
 #' @section Errors:
 #' A non-`OK` status raises `zugrpc_error_status`, whose class also carries
@@ -126,6 +128,9 @@ unary_result <- function(
 ) {
   headers <- lower_names(headers)
   trailers <- lower_names(trailers)
+  # Decoded once, so that a bad -bin value warns once.
+  user_headers <- metadata_decode(user_metadata(headers))
+  user_trailers <- metadata_decode(user_metadata(trailers))
   # Trailers-Only: the status arrives in the one HEADERS block.
   status_fields <- trailers
   if (is.null(field(trailers, "grpc-status")) && length(body) == 0L) {
@@ -141,8 +146,8 @@ unary_result <- function(
         sprintf("HTTP status %d with no grpc-status", http_status),
         http_status = http_status,
         method = method,
-        headers = metadata_decode(user_metadata(headers)),
-        trailers = metadata_decode(user_metadata(trailers))
+        headers = user_headers,
+        trailers = user_trailers
       )
     }
     check_content_type(headers, body)
@@ -162,8 +167,8 @@ unary_result <- function(
       ),
       http_status = http_status,
       method = method,
-      headers = metadata_decode(user_metadata(headers)),
-      trailers = metadata_decode(user_metadata(trailers))
+      headers = user_headers,
+      trailers = user_trailers
     )
   }
   check_content_type(headers, body)
@@ -193,8 +198,8 @@ unary_result <- function(
 
   list(
     message = framed$messages[[1L]],
-    headers = metadata_decode(user_metadata(headers)),
-    trailers = metadata_decode(user_metadata(trailers)),
+    headers = user_headers,
+    trailers = user_trailers,
     status = "OK"
   )
 }

@@ -62,12 +62,32 @@ metadata_value <- function(name, value) {
 }
 
 # Received metadata, as a named character vector from the wire, into a named
-# list: `-bin` values become raw vectors, others stay strings.
+# list: `-bin` values become raw vectors, others stay strings. A `-bin` value
+# may join several with commas; each becomes an entry of the same name, as a
+# repeated header does. One that is not base64 is dropped with a warning:
+# metadata never decides the outcome of a call (§9).
 metadata_decode <- function(headers) {
-  out <- as.list(headers)
-  bin <- endsWith(names(headers), "-bin")
-  out[bin] <- lapply(headers[bin], base64_decode)
-  out
+  nms <- names(headers)
+  bin <- endsWith(nms, "-bin")
+  if (!any(bin)) {
+    return(as.list(headers))
+  }
+  out <- lapply(seq_along(headers), function(i) {
+    if (bin[i]) bin_values(nms[i], headers[[i]]) else list(headers[[i]])
+  })
+  times <- lengths(out)
+  stats::setNames(unlist(out, recursive = FALSE), rep(nms, times))
+}
+
+bin_values <- function(name, value) {
+  pieces <- if (nzchar(value)) strsplit(value, ",", fixed = TRUE)[[1L]] else ""
+  tryCatch(
+    lapply(trimws(pieces), base64_decode),
+    zugrpc_error_protocol = function(e) {
+      metadata_warning(name, value)
+      list()
+    }
+  )
 }
 
 # Channel headers go on every call; call metadata replaces a channel header

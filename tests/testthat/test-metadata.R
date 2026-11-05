@@ -95,6 +95,29 @@ test_that("metadata_decode() turns -bin values back into raw vectors", {
   expect_identical(padded, list("trace-bin" = as.raw(1:2)))
 })
 
+test_that("metadata_decode() splits a comma-joined -bin value", {
+  # A server may join repeated binary values with commas, as grpc-go reads.
+  md <- metadata_decode(c("x-bin" = "AQ,Ag", "y" = "a,b"))
+  expect_identical(
+    md,
+    list("x-bin" = as.raw(1), "x-bin" = as.raw(2), "y" = "a,b")
+  )
+})
+
+test_that("metadata_decode() drops a -bin value that is not base64", {
+  expect_warning(
+    md <- metadata_decode(c("x-bin" = "!!!", "y" = "ok")),
+    class = "zugrpc_warning_metadata"
+  )
+  expect_identical(md, list("y" = "ok"))
+  cnd <- expect_warning(
+    metadata_decode(c("x-bin" = "!!!")),
+    class = "zugrpc_warning"
+  )
+  expect_identical(cnd$name, "x-bin")
+  expect_identical(cnd$value, "!!!")
+})
+
 test_that("metadata_merge() lets call metadata override channel headers", {
   channel <- c(authorization = "a", "x-env" = "prod")
   call <- c("x-env" = "test", "x-req" = "1")

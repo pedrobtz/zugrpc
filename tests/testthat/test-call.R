@@ -302,3 +302,36 @@ test_that("text/html with status 200 is a protocol error with the body", {
   expect_identical(cnd$content_type, "text/html; charset=utf-8")
   expect_identical(cnd$body, page[1:1024])
 })
+
+test_that("bad -bin metadata from a server is a warning, never the outcome", {
+  # An error status keeps its class.
+  m <- mock_channel(grpc_response(
+    trailers = c("grpc-status" = "14", "grpc-message" = "down", "x-bin" = "!!")
+  ))
+  expect_warning(
+    cnd <- expect_error(
+      grpc_call(m$channel, "/a.B/C", raw()),
+      class = "zugrpc_error_unavailable"
+    ),
+    class = "zugrpc_warning_metadata"
+  )
+  expect_identical(cnd$method, "/a.B/C")
+
+  # A successful call still succeeds, whether the value is in the headers or
+  # the trailers, and warns once for each.
+  m <- mock_channel(grpc_response(
+    headers = c("content-type" = "application/grpc", "h-bin" = "!!"),
+    trailers = c("grpc-status" = "0", "t-bin" = "!!", "t" = "v")
+  ))
+  warnings <- 0L
+  res <- withCallingHandlers(
+    grpc_call(m$channel, "/a.B/C", raw()),
+    zugrpc_warning_metadata = function(w) {
+      warnings <<- warnings + 1L
+      invokeRestart("muffleWarning")
+    }
+  )
+  expect_identical(warnings, 2L)
+  expect_identical(res$status, "OK")
+  expect_identical(res$trailers, list(t = "v"))
+})
