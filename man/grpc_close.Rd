@@ -13,8 +13,10 @@ grpc_close(channel)
 \code{channel}, invisibly.
 }
 \description{
-Closes the channel's idle connections. A call on a closed channel raises
-\code{zugrpc_error_argument}. Closing a channel twice does nothing.
+Cancels the channel's open streams and closes its idle connections. A call
+on a closed channel raises \code{zugrpc_error_argument}, and a cancelled stream
+raises \code{zugrpc_error_cancelled} when it is next read. Closing a channel
+twice does nothing.
 }
 \examples{
 ch <- grpc_channel("http://localhost:50051")
