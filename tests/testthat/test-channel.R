@@ -51,16 +51,16 @@ test_that("grpc_channel() validates its other arguments", {
 
 test_that("the channel's client requires HTTP/2, also when one is supplied", {
   ch <- grpc_channel("http://localhost:1")
-  expect_identical(ch$client$http2, "required")
-  expect_false(ch$client$check)
-  expect_identical(ch$client$max_body, 128 * 1024^2 + 5)
+  expect_identical(client_setting(ch$client, "http2"), "required")
+  expect_false(client_setting(ch$client, "check"))
+  expect_identical(client_setting(ch$client, "max_body"), 128 * 1024^2 + 5)
 
   base <- zuhttp::zu_client(http2 = "off", timeout = 7)
   ch <- grpc_channel("http://localhost:1", client = base, max_message = 10)
-  expect_identical(ch$client$http2, "required")
-  expect_identical(ch$client$timeout, 7)
-  expect_identical(ch$client$max_body, 15)
-  expect_identical(base$http2, "off")
+  expect_identical(client_setting(ch$client, "http2"), "required")
+  expect_identical(client_setting(ch$client, "timeout"), 7)
+  expect_identical(client_setting(ch$client, "max_body"), 15)
+  expect_identical(client_setting(base, "http2"), "off")
 })
 
 test_that("grpc_close() closes once, and a closed channel refuses calls", {
@@ -88,9 +88,9 @@ test_that("a channel prints its authority, transport and state", {
 
 test_that("keepalive defaults to Spark's 60 and 20 seconds, in the pool", {
   ch <- grpc_channel("http://localhost:1")
-  expect_identical(ch$client$pool$keepalive_time_ms, 60000L)
-  expect_identical(ch$client$pool$keepalive_timeout_ms, 20000L)
-  expect_identical(ch$stream_client$pool$keepalive_time_ms, 60000L)
+  expect_identical(pool_setting(ch$client, "keepalive_time_ms"), 60000L)
+  expect_identical(pool_setting(ch$client, "keepalive_timeout_ms"), 20000L)
+  expect_identical(pool_setting(ch$stream_client, "keepalive_time_ms"), 60000L)
 
   base <- zuhttp::zu_client(pool = zuhttp::zu_pool(max_idle = 3L))
   ch <- grpc_channel(
@@ -98,18 +98,18 @@ test_that("keepalive defaults to Spark's 60 and 20 seconds, in the pool", {
     keepalive = grpc_keepalive(time = 5, timeout = 2),
     client = base
   )
-  expect_identical(ch$client$pool$max_idle, 3L)
-  expect_identical(ch$client$pool$keepalive_time_ms, 5000L)
-  expect_identical(ch$client$pool$keepalive_timeout_ms, 2000L)
+  expect_identical(pool_setting(ch$client, "max_idle"), 3L)
+  expect_identical(pool_setting(ch$client, "keepalive_time_ms"), 5000L)
+  expect_identical(pool_setting(ch$client, "keepalive_timeout_ms"), 2000L)
 
   ch <- grpc_channel("http://localhost:1", keepalive = NULL)
-  expect_identical(ch$client$pool$keepalive_time_ms, 0L)
+  expect_identical(pool_setting(ch$client, "keepalive_time_ms"), 0L)
 
   ch <- grpc_channel(
     "http://localhost:1",
     client = zuhttp::zu_client(pool = NULL)
   )
-  expect_null(ch$client$pool)
+  expect_null(client_setting(ch$client, "pool"))
 })
 
 test_that("grpc_keepalive() validates and prints", {
@@ -138,4 +138,21 @@ test_that("unary calls and streams share the channel's one pool", {
   # So that grpc_close() releases the idle connections of both.
   ch <- grpc_channel("http://localhost:1")
   expect_true(identical(pool_state(ch$stream_client), pool_state(ch$client)))
+})
+
+test_that("tls reaches both of the channel's clients", {
+  tls <- zuhttp::zu_tls()
+  ch <- grpc_channel("https://localhost:443", tls = tls)
+  expect_identical(client_setting(ch$client, "tls"), tls)
+  expect_identical(client_setting(ch$stream_client, "tls"), tls)
+
+  base <- zuhttp::zu_client()
+  ch <- grpc_channel("https://localhost:443", tls = tls, client = base)
+  expect_identical(client_setting(ch$client, "tls"), tls)
+})
+
+test_that("a stream's body is unbounded; each message is bounded instead", {
+  ch <- grpc_channel("http://localhost:1", max_message = 10)
+  expect_identical(client_setting(ch$client, "max_body"), 15)
+  expect_identical(client_setting(ch$stream_client, "max_body"), Inf)
 })

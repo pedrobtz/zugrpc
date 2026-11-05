@@ -357,3 +357,36 @@ test_that("every failure of a call carries its method and HTTP status", {
     expect_identical(cnd$http_status, 200L, info = name)
   }
 })
+
+test_that("a status condition carries the response's metadata", {
+  respond <- grpc_response(
+    body = raw(),
+    headers = c("content-type" = "application/grpc", "x-h" = "1"),
+    trailers = c("grpc-status" = "5", "x-t" = "2", "x-t-bin" = "AQI")
+  )
+  m <- mock_channel(respond)
+  cnd <- expect_error(
+    grpc_call(m$channel, "/a.B/C", raw()),
+    class = "zugrpc_error_not_found"
+  )
+  expect_identical(cnd$headers, list("x-h" = "1"))
+  expect_identical(cnd$trailers, list("x-t" = "2", "x-t-bin" = as.raw(1:2)))
+
+  m <- mock_channel(respond)
+  st <- grpc_stream(m$channel, "/a.B/C", raw())
+  cnd <- expect_error(st$next_message(), class = "zugrpc_error_not_found")
+  expect_identical(cnd$headers, list("x-h" = "1"))
+  expect_identical(cnd$trailers, list("x-t" = "2", "x-t-bin" = as.raw(1:2)))
+
+  m <- mock_channel(grpc_response(
+    body = raw(),
+    headers = c("content-type" = "text/plain", "x-h" = "1"),
+    trailers = NULL,
+    status = 503L
+  ))
+  cnd <- expect_error(
+    grpc_call(m$channel, "/a.B/C", raw()),
+    class = "zugrpc_error_unavailable"
+  )
+  expect_identical(cnd$headers, list("x-h" = "1"))
+})
