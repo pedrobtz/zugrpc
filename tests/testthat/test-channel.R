@@ -121,3 +121,21 @@ test_that("grpc_keepalive() validates and prints", {
   )
   expect_snapshot(print(grpc_keepalive(time = 30, timeout = 10)))
 })
+
+test_that("a channel never shares its pool with the client it builds on", {
+  base <- zuhttp::zu_client()
+  a <- grpc_channel("http://localhost:1", client = base, keepalive = NULL)
+  b <- grpc_channel("http://localhost:1", client = base, keepalive = NULL)
+  expect_false(identical(pool_state(a$client), pool_state(base)))
+  expect_false(identical(pool_state(a$client), pool_state(b$client)))
+
+  # The default keepalive changes the pool settings, and still gets its own.
+  c <- grpc_channel("http://localhost:1", client = a$client)
+  expect_false(identical(pool_state(c$client), pool_state(a$client)))
+})
+
+test_that("unary calls and streams share the channel's one pool", {
+  # So that grpc_close() releases the idle connections of both.
+  ch <- grpc_channel("http://localhost:1")
+  expect_true(identical(pool_state(ch$stream_client), pool_state(ch$client)))
+})

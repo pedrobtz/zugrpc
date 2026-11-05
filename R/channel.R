@@ -81,7 +81,7 @@ grpc_channel <- function(
   } else {
     do.call(zuhttp::zu_client_update, c(list(client), settings))
   }
-  client <- with_keepalive(client, keepalive)
+  client <- own_pool(with_keepalive(client, keepalive))
 
   ch <- new.env(parent = emptyenv())
   ch$origin <- target$origin
@@ -90,7 +90,9 @@ grpc_channel <- function(
   ch$headers <- metadata_encode(headers)
   ch$max_message <- max_message
   ch$client <- client
-  # Streams bound max_message per message, not the whole body (§6.3).
+  # Streams bound max_message per message, not the whole body (§6.3). The
+  # update keeps the pool, so both clients share the channel's connections
+  # and grpc_close() releases them all.
   ch$stream_client <- zuhttp::zu_client_update(client, max_body = Inf)
   ch$streams <- new.env(parent = emptyenv())
   ch$next_id <- 0
@@ -223,6 +225,19 @@ print.zugrpc_keepalive <- function(x, ...) {
     x$timeout
   ))
   invisible(x)
+}
+
+# A channel's connections are its own, so grpc_close() cannot clear those of
+# the caller's client or of another channel built on it (§6.1, D8). zuhttp
+# gives a client a fresh pool whenever its pool setting changes, and the
+# setting is changed twice to get one when it would stay the same.
+own_pool <- function(client) {
+  pool <- client$pool
+  if (is.null(pool)) {
+    return(client)
+  }
+  client <- zuhttp::zu_client_update(client, pool = NULL)
+  zuhttp::zu_client_update(client, pool = pool)
 }
 
 # Keepalive is a setting of zuhttp's pool (its §65.6). The client's other
