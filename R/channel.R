@@ -171,12 +171,17 @@ check_channel <- function(channel, open = TRUE) {
   invisible(channel)
 }
 
+# Built once per session: packageVersion() takes about a millisecond, which
+# is more than the rest of a unary call's own work (design §11).
 user_agent <- function() {
-  sprintf(
-    "zugrpc/%s zuhttp/%s",
-    utils::packageVersion("zugrpc"),
-    utils::packageVersion("zuhttp")
-  )
+  if (is.null(rpc_env$user_agent)) {
+    rpc_env$user_agent <- sprintf(
+      "zugrpc/%s zuhttp/%s",
+      utils::packageVersion("zugrpc"),
+      utils::packageVersion("zuhttp")
+    )
+  }
+  rpc_env$user_agent
 }
 
 #' HTTP/2 keepalive settings
