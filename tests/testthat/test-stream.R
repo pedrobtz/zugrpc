@@ -29,6 +29,54 @@ test_that("a stream read to its end is not aborted", {
   expect_identical(spy$abort, 0L)
 })
 
+test_that("recorded grpc-go streams replay message by message", {
+  cases <- list(
+    sizes = c(31415, 9, 2653, 58979),
+    large = c(70000, 1),
+    empty = numeric()
+  )
+  for (name in names(cases)) {
+    fx <- read_fixture(name, dir = "stream")
+    m <- replay_channel(fx)
+    st <- grpc_stream(m$channel, fx$request$method, fx$request$body[-(1:5)])
+    expect_identical(m$seen$requests[[1L]]$body, fx$request$body, info = name)
+    got <- numeric()
+    while (!is.null(msg <- st$next_message())) {
+      got <- c(got, payload_size(msg))
+    }
+    expect_identical(got, cases[[name]], info = name)
+    expect_identical(st$status(), "OK", info = name)
+    expect_type(st$trailers(), "list")
+  }
+})
+
+test_that("a recorded stream that fails after its messages raises at the end", {
+  fx <- read_fixture("fail", dir = "stream")
+  m <- replay_channel(fx)
+  st <- grpc_stream(m$channel, fx$request$method, raw())
+  # google.protobuf.BytesValue: field 1, one byte.
+  expect_identical(st$next_message(), as.raw(c(0x0a, 0x01, 0x01)))
+  expect_identical(st$next_message(), as.raw(c(0x0a, 0x01, 0x02)))
+  cnd <- expect_error(
+    st$next_message(),
+    class = "zugrpc_error_failed_precondition"
+  )
+  expect_identical(cnd$grpc_message, "stream end")
+  expect_identical(st$status(), "FAILED_PRECONDITION")
+})
+
+test_that("a recorded Trailers-Only stream raises its status at once", {
+  fx <- read_fixture("status-09", dir = "stream")
+  m <- replay_channel(fx)
+  st <- grpc_stream(m$channel, fx$request$method, fx$request$body[-(1:5)])
+  expect_identical(m$seen$requests[[1L]]$body, fx$request$body)
+  cnd <- expect_error(
+    st$next_message(),
+    class = "zugrpc_error_failed_precondition"
+  )
+  expect_identical(cnd$grpc_message, "stream end")
+})
+
 test_that("a message split across reads at every offset reassembles", {
   msgs <- list(as.raw(1:9), as.raw(10:12))
   body <- do.call(c, lapply(msgs, wire_message))
@@ -226,16 +274,13 @@ test_that("grpc_close() cancels the channel's open streams", {
 })
 
 test_that("a dropped stream is cancelled by its finaliser", {
-  # Streams that other tests dropped are collected first, so the count below
-  # is of this one.
-  gc()
   m <- mock_channel(grpc_response(body = stream_body(as.raw(1), as.raw(2))))
+  spy <- local_zuhttp_spy()
   local({
     st <- grpc_stream(m$channel, "/a.B/C", raw())
     st$next_message()
   })
   expect_length(ls(m$channel$streams), 1L)
-  spy <- local_zuhttp_spy()
   gc()
   expect_length(ls(m$channel$streams), 0L)
   expect_identical(spy$abort, 1L)

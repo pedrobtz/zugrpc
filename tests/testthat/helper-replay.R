@@ -1,7 +1,12 @@
 # A recorded response from tests/testthat/fixtures/<dir>/, written by
 # tools/record-fixtures.R against grpc-go's interop server.
+# Stream fixtures are gzipped; file() reads either.
 read_fixture <- function(name, dir = "unary") {
-  dget(test_path("fixtures", dir, paste0(name, ".dput")))
+  path <- test_path("fixtures", dir, paste0(name, ".dput"))
+  if (!file.exists(path)) {
+    path <- paste0(path, ".gz")
+  }
+  dget(path)
 }
 
 # A channel whose zuhttp client answers every request with `respond(req)`,
@@ -91,7 +96,10 @@ stream_body <- function(...) do.call(c, lapply(list(...), wire_message))
 # Counts the calls zugrpc makes to zuhttp's zu_resp_abort(), which sends
 # RST_STREAM, and zu_pool_reset(), which closes connections, while still
 # making them. Cancellation must abort exactly once and never reset (D8).
+# Streams other tests dropped are collected first, so that their finalisers
+# do not count here.
 local_zuhttp_spy <- function(env = parent.frame()) {
+  gc()
   calls <- new.env(parent = emptyenv())
   calls$abort <- 0L
   calls$reset <- 0L
