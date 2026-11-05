@@ -112,7 +112,8 @@ make possible.
 - A pull iterator for streaming responses, so `zuspark` can read Arrow
   batches as they arrive without holding the whole response.
 - `zugrpc_info()`: the `zuhttp` version, whether it offers HTTP/2, and
-  the TLS backend it reports.
+  the TLS backend it reports. *Added in Stage 4 (2026-11-05), which no
+  stage listed it in.*
 
 **Later, in the order expected** (§16): `grpc-encoding: gzip` through
 `zukomp`; client-streaming and bidirectional calls once `zuhttp` has
@@ -297,6 +298,16 @@ streaming path returns one message per `$next_message()`, pulling more
 body only when the buffer holds no complete message; a partial message
 is kept as one remainder and concatenated at most once.
 
+*Decided 2026-11-05 (Stage 4):* the stream keeps the pieces it has read
+in a list and joins them once the five-byte prefix says the message is
+complete, so a 16 MiB message costs one join, not one per read. Each
+read asks for the rest of the current message, at least 64 KiB and at
+most 16 MiB. The prefix is checked as soon as it is complete, so a
+length above `max_message` aborts the request after five bytes. A
+stream uses a second client derived from the channel's with `max_body =
+Inf`, since `max_message` bounds each message and a stream's total is
+unbounded.
+
 ### 6.4 Metadata
 
 Metadata is a named character vector. A name ending in `-bin` carries
@@ -366,6 +377,24 @@ caught by `zuhttp` at its poll checkpoint (§25.1, re-raised as
 channel, and re-raises as `zugrpc_error_interrupt`. A stream abandoned
 by its caller is cancelled by its finaliser. `grpc_close()` cancels
 every open stream and closes the client.
+
+*Decided 2026-11-05 (Stage 4):* `$next_message()` takes no timeout of its
+own (Q3); the call deadline is the bound. A deadline already passed fails
+with `DEADLINE_EXCEEDED` before anything is sent, since zuhttp refuses a
+zero timeout. Otherwise the deadline is the request's `total` timeout and,
+for a stream, is also checked against the clock before each read. zuhttp
+bounds each wait in `zu_resp_read()` by that timeout afresh (its §65.4),
+so a stream that stalls right after its headers fails at the deadline,
+but one that stalls after `t` seconds fails at about `t + deadline`.
+[zuhttp#173](https://github.com/pedrobtz/zuhttp/issues/173) asks for a
+per-read timeout, which would make the deadline exact; nothing in the
+API changes when it lands. `$cancel()` also drops messages already
+buffered, and a later `$next_message()` raises `CANCELLED`. The channel
+keeps the open zuhttp responses, not the stream objects, so a stream
+nobody holds can still be collected; its finaliser aborts the response
+and removes it. `grpc_close()` aborts every response it holds, and each
+stream sees the closed channel at its next read. A stream object is a
+list of the five closures of §5 with class `zugrpc_stream`.
 
 ### 6.7 What Spark cannot use
 
@@ -583,7 +612,7 @@ interrupt, `zu_interrupted_error`, is `zugrpc_error_interrupt` with
   encoding the `grpc.testing` requests by hand so the fixtures check
   zugrpc's encoder rather than repeat it.
 - **A local server in CI.** The Ubuntu legs run a gRPC server in Docker
-  behind `ZUGRPC_TEST_SERVER`: `grpc-go`'s interop server
+  behind `ZU_GRPC_TEST_SERVER`: `grpc-go`'s interop server
   (`interop/server`, Apache-2.0), built from a pinned tag, for the
   standard `UnaryCall`, `StreamingOutputCall`, status and metadata
   cases; and the `apache/spark` image (4.2.1 tags published on
@@ -591,7 +620,26 @@ interrupt, `zu_interrupted_error`, is `zugrpc_error_interrupt` with
   `ExecutePlan` that streams and ends `OK` and one invalid plan that
   carries Spark's `ErrorInfo`. The gRPC project's own interop images
   live in a Google Artifact Registry and are not relied on. macOS and
-  Windows legs run the recorded responses only.
+  Windows legs run the recorded responses only. *Decided 2026-11-05
+  (Stage 4):* the live tests run in a workflow of their own,
+  `.github/workflows/live.yaml`, since `r-cmd-check.yml` cannot start a
+  server and its checks must not touch a network. It runs on Ubuntu,
+  macOS and Windows, not Ubuntu alone, so that TLS with ALPN `h2` is
+  shown on all three. The servers are built with `go install`, as
+  zuhttp's `network.yaml` builds them, not run in Docker, which the
+  macOS and Windows runners lack. `tools/ci-live.sh` starts grpc-go's
+  interop server at v1.67.1 over h2c and over TLS, and
+  `tools/test-server` (grpc-go v1.67.1 and Go's standard library) for
+  the cases the interop server lacks: a method that stalls after its
+  headers, the status details of §6.5, a TLS port offering only
+  `http/1.1`, and a plain HTTP/2 server that is not gRPC. It writes a
+  throwaway CA and a `localhost` certificate. The variables follow
+  zuhttp's: `ZU_GRPC_TEST_SERVER`, `ZU_GRPC_TEST_TLS`,
+  `ZU_GRPC_TEST_CA`, `ZU_GRPC_TEST_STATUS`, `ZU_GRPC_TEST_H1_TLS` and
+  `ZU_H2_TEST_SERVER`, and each live test skips unless its own is set.
+  Schannel cannot take a private CA yet (zuhttp#5), so on Windows the
+  TLS tests turn verification off; they test ALPN, and trust is
+  zuhttp's to test.
 - **Hostile input, at this layer.** A declared length above
   `max_message`, a compressed flag with no encoding, trailers with no
   `grpc-status`, a `grpc-status-details-bin` that is not base64 or not
@@ -625,12 +673,12 @@ pin is googleapis commit `02362883cd16428e5f57fa60ca8d8f60dafcdba7`
 without `--include_imports`, since every zuproto pool holds the
 well-known types. A test checks the SHA-256 where `tools::sha256sum()`
 exists. Google LLC is listed as `cph` in `Authors@R`. The `ErrorInfo`
-fixtures are recorded from `tools/status-server`, a small grpc-go
+fixtures are recorded from `tools/test-server`, a small grpc-go
 v1.67.1 server that returns Spark-shaped details with
 `status.WithDetails()`; its Go sources are in `.Rbuildignore`. Spark
 itself is Stage 5's test. `R CMD check` runs no
-network test unless `ZUGRPC_TEST_SERVER` is set, following zuhttp
-§47.5.
+network test unless `ZU_GRPC_TEST_SERVER` or another of §10's variables
+is set, following zuhttp §47.5.
 
 **The release gate.** v0.1.0 goes to CRAN only after `zuhttp`'s minor
 after 1.0 that carries §7.1 and §7.2 items 1 to 6 (the floor in
@@ -716,12 +764,15 @@ any of them.
 
 ## 17. Open questions
 
-- **Q1.** Which `zuhttp` minor carries HTTP/2, and does it come before
-  or after W14 and W15? The issue of §7 is the place to settle it.
-- **Q2.** Pull or callback for the streaming body (§7.2, item 3)? Pull
-  is asked for; D6 records the fallback.
-- **Q3.** Should `$next_message()` take a `timeout` of its own, or is
-  the call deadline enough? Spark's reattach loop may want the former.
+- **Q1.** *Settled 2026-11-05 (Stage 4):* zuhttp 0.1.0, its first
+  release, carries HTTP/2 (§7.1, §7.2 items 1 to 7), so the `Imports`
+  floor is `zuhttp (>= 0.1.0)` once that is on CRAN. Its CRAN
+  submission waited on this package's Stage 4 live test.
+- **Q2.** *Settled 2026-11-05 (Stage 4):* pull, through `zu_perform(stream
+  = TRUE)` and `zu_resp_read()`; D6 stands.
+- **Q3.** *Settled 2026-11-05 (Stage 4):* no `timeout` of its own in
+  v0.1.0; the call deadline is enough (§6.6). One can be added later
+  without breaking a caller, once zuhttp#173 gives a per-read bound.
 - **Q4.** *Settled 2026-11-05 (Stage 2):* yes, as `client =` (§6.1).
 - **Q5.** Is v0.1.0 a CRAN submission before `zuspark` exists, or does
   the pair go together? The board's `CRAN intent` records it.

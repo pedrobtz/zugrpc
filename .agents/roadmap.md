@@ -19,7 +19,7 @@ descriptor set moves from Stage 0 to Stage 3, the stage that first uses it.
 | 1 | [Framing](#stage-1--framing) | quick | [#3](https://github.com/pedrobtz/zugrpc/issues/3) | [#14](https://github.com/pedrobtz/zugrpc/pull/14) | 2026-11-03 |
 | 2 | [Unary calls on recorded responses](#stage-2--unary-calls-on-recorded-responses) | quick | [#4](https://github.com/pedrobtz/zugrpc/issues/4) | [#15](https://github.com/pedrobtz/zugrpc/pull/15) | 2026-11-05 |
 | 3 | [Status details and conditions](#stage-3--status-details-and-conditions) | quick | [#5](https://github.com/pedrobtz/zugrpc/issues/5) | [#16](https://github.com/pedrobtz/zugrpc/pull/16) | 2026-11-05 |
-| 4 | [Live HTTP/2 and streaming](#stage-4--live-http2-and-streaming) | full | [#6](https://github.com/pedrobtz/zugrpc/issues/6) | | |
+| 4 | [Live HTTP/2 and streaming](#stage-4--live-http2-and-streaming) | full | [#6](https://github.com/pedrobtz/zugrpc/issues/6) | | 2026-11-05 |
 | 5 | [Spark, keepalive and performance](#stage-5--spark-keepalive-and-performance) | quick | [#7](https://github.com/pedrobtz/zugrpc/issues/7) | | |
 | 6 | [Full CI](#stage-6--full-ci) | full | [#8](https://github.com/pedrobtz/zugrpc/issues/8) | | |
 | 7 | [v0.1.0 readiness](#stage-7--v010-readiness) | full | [#9](https://github.com/pedrobtz/zugrpc/issues/9) | | |
@@ -161,9 +161,21 @@ back pressure, and honours deadlines, cancellation and interrupts.
 - `grpc_stream()` and the `zugrpc_stream` iterator on `zuhttp`'s pull body.
 - Deadlines, `$cancel()`, interrupts, the finaliser, `grpc_close()` with open
   streams.
-- The live-server tests behind `ZUGRPC_TEST_SERVER`, against `grpc-go`'s
+- The live-server tests behind `ZU_GRPC_TEST_SERVER`, against `grpc-go`'s
   interop server built from a pinned tag.
 - `Remotes:` on the `zuhttp` branch that carries HTTP/2.
+- *Added 2026-11-05:* `zugrpc_info()`, which the design's §2 scope lists
+  but no stage did. It reports zuhttp's HTTP/2 and TLS, which this stage
+  first uses.
+
+**Deviations (2026-11-05).** zuhttp's `main` carries HTTP/2, so
+`Remotes:` stays `pedrobtz/zuhttp` with no branch. The live tests run in
+their own workflow, `live.yaml`, on all three platforms rather than on the
+R-CMD-check Ubuntu legs, with `tools/test-server` beside the interop
+server for the stall, details, `http/1.1`-only and not-gRPC cases (design
+§10). A stream that stalls mid-way can overrun its deadline by up to one
+deadline, until zuhttp#173 (design §6.6); the exit criterion's stall,
+right after the headers, fails at the deadline.
 
 **Exit criteria.**
 
@@ -290,13 +302,5 @@ fixed. No new features. Only submission is left when it closes.
 
 ## Blocking open questions
 
-- [§17](design.md#17-open-questions) Q1 blocks Stage 4 and Stage 7: which
-  `zuhttp` minor carries HTTP/2, and when it reaches CRAN (D3).
-- [§17](design.md#17-open-questions) Q2 blocks Stage 4: pull or callback for
-  the streaming body. A callback turns `grpc_stream()` into `each =` (D6).
-- [§17](design.md#17-open-questions) Q3 should be settled before Stage 4:
-  whether `$next_message()` takes its own timeout.
-- [§10](design.md#10-testing) blocks Stage 4: the live tests run a gRPC
-  server in Docker, but `r-cmd-check.yml` has no input for a service
-  container. Either r-actions gains one, or the design records a caller
-  workflow for the live tests. Not yet in the design's open questions.
+- [§17](design.md#17-open-questions) Q1 blocks Stage 7: zuhttp 0.1.0 carries
+  HTTP/2 (settled in Stage 4), and Stage 7 waits for it to reach CRAN (D3).
