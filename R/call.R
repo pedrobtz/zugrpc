@@ -35,8 +35,9 @@
 #' `grpc-status-details-bin` trailer, or `NULL` when there is none: a list of
 #' `code`, `message` and `details`. Its `details` are the decoded error
 #' details, named by type, such as `ErrorInfo` with its `reason`, `domain`
-#' and `metadata`. A trailer that does not decode gives a
-#' `zugrpc_warning_details` warning, and `details` is `NULL`.
+#' and `metadata`. Two details of one type share its name, so
+#' `d[names(d) == "BadRequest"]` selects them all. A trailer that does not
+#' decode gives a `zugrpc_warning_details` warning, and `details` is `NULL`.
 #'
 #' A failure below gRPC, such as a refused connection or a TLS error,
 #' raises `zugrpc_error_transport`, which is also `zugrpc_error_unavailable`.

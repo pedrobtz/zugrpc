@@ -120,7 +120,9 @@ check_method <- function(method) {
   ok <- is.character(method) &&
     length(method) == 1L &&
     !is.na(method) &&
-    grepl("^/[^/]+/[^/]+$", method)
+    # Protobuf names: a dotted service and a method identifier, so nothing
+    # that changes the request path, such as `?` or `#`.
+    grepl("^/[A-Za-z_][A-Za-z0-9_.]*/[A-Za-z_][A-Za-z0-9_]*$", method)
   if (!ok) {
     zugrpc_abort(
       "argument",

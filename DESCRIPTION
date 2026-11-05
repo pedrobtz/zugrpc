@@ -22,10 +22,10 @@ Depends:
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 8.1.1
 Imports:
-    zuhttp,
-    zuproto
+    zuhttp (>= 0.1.0),
+    zuproto (>= 0.1.0)
 Suggests: 
-    testthat (>= 3.0.0),
+    testthat (>= 3.2.0),
     withr
 Remotes:
     pedrobtz/zuhttp,

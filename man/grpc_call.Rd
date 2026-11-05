@@ -47,8 +47,9 @@ the status as \verb{zugrpc_error_<name>}, for example
 \code{grpc-status-details-bin} trailer, or \code{NULL} when there is none: a list of
 \code{code}, \code{message} and \code{details}. Its \code{details} are the decoded error
 details, named by type, such as \code{ErrorInfo} with its \code{reason}, \code{domain}
-and \code{metadata}. A trailer that does not decode gives a
-\code{zugrpc_warning_details} warning, and \code{details} is \code{NULL}.
+and \code{metadata}. Two details of one type share its name, so
+\code{d[names(d) == "BadRequest"]} selects them all. A trailer that does not
+decode gives a \code{zugrpc_warning_details} warning, and \code{details} is \code{NULL}.
 
 A failure below gRPC, such as a refused connection or a TLS error,
 raises \code{zugrpc_error_transport}, which is also \code{zugrpc_error_unavailable}.

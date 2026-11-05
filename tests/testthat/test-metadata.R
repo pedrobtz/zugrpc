@@ -183,3 +183,22 @@ test_that("the reserved names are the same going out and coming in", {
   fields <- stats::setNames(as.character(seq_along(nms)), nms)
   expect_named(user_metadata(fields), "x")
 })
+
+test_that("a non-ASCII metadata value is an argument error and nothing else", {
+  bad <- list(x = "café", y = rawToChar(as.raw(c(0x61, 0xff))))
+  for (name in names(bad)) {
+    expect_no_warning(
+      expect_error(
+        metadata_encode(bad[name]),
+        class = "zugrpc_error_argument"
+      )
+    )
+  }
+})
+
+test_that("check_method() takes only gRPC name characters", {
+  for (m in c("/a.B/C#x", "/a.B/C?x=1", "/a B/C", "/a.B/C%2F", "/1a/C")) {
+    expect_error(check_method(m), class = "zugrpc_error_argument", info = m)
+  }
+  expect_identical(check_method("/a_b.C_1/D_2"), "/a_b.C_1/D_2")
+})

@@ -65,7 +65,7 @@ metadata_value <- function(name, value) {
   ok <- is.character(value) &&
     length(value) == 1L &&
     !is.na(value) &&
-    grepl("^[ -~]*$", value)
+    grepl("^[ -~]*$", value, useBytes = TRUE)
   if (!ok) {
     zugrpc_abort(
       "argument",
