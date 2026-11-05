@@ -248,7 +248,8 @@ stream_end <- function(st) {
     zugrpc_abort(
       "protocol",
       "The response body ends inside a gRPC message.",
-      method = st$method
+      method = st$method,
+      http_status = st$http_status
     )
   }
   status_fields <- trailers
@@ -300,6 +301,10 @@ stream_guard <- function(st, expr) {
     zuhttp_error = function(cnd) {
       stream_finish(st, abort = TRUE)
       transport_abort(cnd, st$method)
+    },
+    zugrpc_error = function(cnd) {
+      stream_finish(st, abort = TRUE)
+      stop(stamp_call(cnd, st$method, st$http_status))
     },
     error = function(cnd) {
       stream_finish(st, abort = TRUE)

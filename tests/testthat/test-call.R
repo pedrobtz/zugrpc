@@ -335,3 +335,25 @@ test_that("bad -bin metadata from a server is a warning, never the outcome", {
   expect_identical(res$status, "OK")
   expect_identical(res$trailers, list(t = "v"))
 })
+
+test_that("every failure of a call carries its method and HTTP status", {
+  responses <- list(
+    html = grpc_response(
+      body = charToRaw("<html>"),
+      trailers = NULL,
+      headers = c("content-type" = "text/html")
+    ),
+    flag = grpc_response(body = wire_message(as.raw(1), flag = 1L)),
+    gzip = grpc_response(
+      body = wire_message(as.raw(1), flag = 1L),
+      headers = c("content-type" = "application/grpc", "grpc-encoding" = "gzip")
+    ),
+    big = grpc_response(body = wire_message(raw(11)))
+  )
+  for (name in names(responses)) {
+    m <- mock_channel(responses[[name]], max_message = 10)
+    cnd <- expect_error(grpc_call(m$channel, "/a.B/C", raw()), info = name)
+    expect_identical(cnd$method, "/a.B/C", info = name)
+    expect_identical(cnd$http_status, 200L, info = name)
+  }
+})

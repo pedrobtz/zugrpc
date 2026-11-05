@@ -126,6 +126,21 @@ unary_result <- function(
   method,
   max_message
 ) {
+  with_call_context(
+    unary_outcome(http_status, headers, body, trailers, method, max_message),
+    method = method,
+    http_status = http_status
+  )
+}
+
+unary_outcome <- function(
+  http_status,
+  headers,
+  body,
+  trailers,
+  method,
+  max_message
+) {
   headers <- lower_names(headers)
   trailers <- lower_names(trailers)
   # Decoded once, so that a bad -bin value warns once.

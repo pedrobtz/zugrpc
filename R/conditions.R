@@ -121,3 +121,25 @@ transport_abort <- function(cnd, method) {
     )
   ))
 }
+
+# Every condition of a call carries its method, and its HTTP status once the
+# response has one (§9). The wire-format helpers raise without them; this
+# stamps them on, keeping any already set.
+with_call_context <- function(expr, method, http_status = NULL) {
+  tryCatch(
+    expr,
+    zugrpc_error = function(cnd) {
+      stop(stamp_call(cnd, method, http_status))
+    }
+  )
+}
+
+stamp_call <- function(cnd, method, http_status = NULL) {
+  if (is.null(cnd$method)) {
+    cnd$method <- method
+  }
+  if (is.null(cnd$http_status) && !is.null(http_status)) {
+    cnd$http_status <- http_status
+  }
+  cnd
+}

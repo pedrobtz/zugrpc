@@ -280,3 +280,26 @@ test_that("bad -bin metadata on a stream is a warning, never the outcome", {
   )
   expect_length(st$trailers(), 0L)
 })
+
+test_that("every failure of a stream carries its method and HTTP status", {
+  m <- mock_channel(grpc_response(
+    body = charToRaw("<html>"),
+    trailers = NULL,
+    headers = c("content-type" = "text/html")
+  ))
+  cnd <- expect_error(grpc_stream(m$channel, "/a.B/C", raw()))
+  expect_identical(cnd$method, "/a.B/C")
+  expect_identical(cnd$http_status, 200L)
+
+  bodies <- list(
+    flag = wire_message(as.raw(1), flag = 1L),
+    big = wire_message(raw(11))
+  )
+  for (name in names(bodies)) {
+    m <- mock_channel(grpc_response(body = bodies[[name]]), max_message = 10)
+    st <- grpc_stream(m$channel, "/a.B/C", raw())
+    cnd <- expect_error(st$next_message(), info = name)
+    expect_identical(cnd$method, "/a.B/C", info = name)
+    expect_identical(cnd$http_status, 200L, info = name)
+  }
+})
