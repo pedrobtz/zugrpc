@@ -17,7 +17,7 @@ descriptor set moves from Stage 0 to Stage 3, the stage that first uses it.
 | --- | --- | --- | --- | --- | --- |
 | 0 | [Package identity](#stage-0--package-identity) | quick | [#2](https://github.com/pedrobtz/zugrpc/issues/2) | [#13](https://github.com/pedrobtz/zugrpc/pull/13) | 2026-11-03 |
 | 1 | [Framing](#stage-1--framing) | quick | [#3](https://github.com/pedrobtz/zugrpc/issues/3) | [#14](https://github.com/pedrobtz/zugrpc/pull/14) | 2026-11-03 |
-| 2 | [Unary calls on recorded responses](#stage-2--unary-calls-on-recorded-responses) | quick | [#4](https://github.com/pedrobtz/zugrpc/issues/4) | | |
+| 2 | [Unary calls on recorded responses](#stage-2--unary-calls-on-recorded-responses) | quick | [#4](https://github.com/pedrobtz/zugrpc/issues/4) | [#15](https://github.com/pedrobtz/zugrpc/pull/15) | 2026-11-05 |
 | 3 | [Status details and conditions](#stage-3--status-details-and-conditions) | quick | [#5](https://github.com/pedrobtz/zugrpc/issues/5) | | |
 | 4 | [Live HTTP/2 and streaming](#stage-4--live-http2-and-streaming) | full | [#6](https://github.com/pedrobtz/zugrpc/issues/6) | | |
 | 5 | [Spark, keepalive and performance](#stage-5--spark-keepalive-and-performance) | quick | [#7](https://github.com/pedrobtz/zugrpc/issues/7) | | |
@@ -296,12 +296,6 @@ fixed. No new features. Only submission is left when it closes.
   the streaming body. A callback turns `grpc_stream()` into `each =` (D6).
 - [§17](design.md#17-open-questions) Q3 should be settled before Stage 4:
   whether `$next_message()` takes its own timeout.
-- [§17](design.md#17-open-questions) Q4 should be settled before Stage 2:
-  whether `grpc_channel()` accepts a caller's `zu_client()`.
-- [§10](design.md#10-testing) blocks Stage 2: replaying recorded responses
-  needs `zuhttp`'s mock transport to carry trailers, and
-  `zu_resp_trailers()` (§7.2, item 2). Stages 0 and 1 need nothing from
-  `zuhttp`.
 - [§10](design.md#10-testing) blocks Stage 4: the live tests run a gRPC
   server in Docker, but `r-cmd-check.yml` has no input for a service
   container. Either r-actions gains one, or the design records a caller

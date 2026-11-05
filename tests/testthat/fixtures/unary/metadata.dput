@@ -1,0 +1,12 @@
+# Recorded from grpc-go v1.67.1 interop server: /grpc.testing.TestService/UnaryCall
+# Regenerate with tools/record-fixtures.R; do not edit by hand.
+list(request = list(method = "/grpc.testing.TestService/UnaryCall", 
+    body = as.raw(c(0x00, 0x00, 0x00, 0x00, 0x02, 0x10, 0x01)), 
+    metadata = c(`x-grpc-test-echo-initial` = "test_initial_metadata_value", 
+    `x-grpc-test-echo-trailing-bin` = "q6ur")), response = list(
+    status = 200L, headers = c(`content-type` = "application/grpc+proto", 
+    `x-grpc-test-echo-initial` = "test_initial_metadata_value"
+    ), body = as.raw(c(0x00, 0x00, 0x00, 0x00, 0x05, 0x0a, 0x03, 
+    0x12, 0x01, 0x00)), trailers = c(`grpc-status` = "0", `grpc-message` = "", 
+    `x-grpc-test-echo-trailing-bin` = "q6ur", `endpoint-load-metrics-bin` = ""
+    )))

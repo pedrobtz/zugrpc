@@ -1,0 +1,7 @@
+# Recorded from grpc-go v1.67.1 interop server: /grpc.testing.UnimplementedService/UnimplementedCall
+# Regenerate with tools/record-fixtures.R; do not edit by hand.
+list(request = list(method = "/grpc.testing.UnimplementedService/UnimplementedCall", 
+    body = as.raw(c(0x00, 0x00, 0x00, 0x00, 0x00)), metadata = NULL), 
+    response = list(status = 200L, headers = c(`content-type` = "application/grpc+proto", 
+    `grpc-status` = "12", `grpc-message` = "unknown service grpc.testing.UnimplementedService"
+    ), body = raw(0), trailers = structure(character(0), names = character(0))))
