@@ -21,7 +21,7 @@ descriptor set moves from Stage 0 to Stage 3, the stage that first uses it.
 | 3 | [Status details and conditions](#stage-3--status-details-and-conditions) | quick | [#5](https://github.com/pedrobtz/zugrpc/issues/5) | [#16](https://github.com/pedrobtz/zugrpc/pull/16) | 2026-11-05 |
 | 4 | [Live HTTP/2 and streaming](#stage-4--live-http2-and-streaming) | full | [#6](https://github.com/pedrobtz/zugrpc/issues/6) | [#19](https://github.com/pedrobtz/zugrpc/pull/19) | 2026-11-05 |
 | 5 | [Spark, keepalive and performance](#stage-5--spark-keepalive-and-performance) | quick | [#7](https://github.com/pedrobtz/zugrpc/issues/7) | [#20](https://github.com/pedrobtz/zugrpc/pull/20) | 2026-11-05 |
-| 6 | [Full CI](#stage-6--full-ci) | full | [#8](https://github.com/pedrobtz/zugrpc/issues/8) | | 2026-11-05 |
+| 6 | [Full CI](#stage-6--full-ci) | full | [#8](https://github.com/pedrobtz/zugrpc/issues/8) | [#21](https://github.com/pedrobtz/zugrpc/pull/21) | 2026-11-05 |
 | 7 | [v0.1.0 readiness](#stage-7--v010-readiness) | full | [#9](https://github.com/pedrobtz/zugrpc/issues/9) | | |
 | 8 | [Review](#stage-8--review) | full | [#10](https://github.com/pedrobtz/zugrpc/issues/10) | | |
 
