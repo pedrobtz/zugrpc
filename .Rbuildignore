@@ -16,3 +16,6 @@
 ^tools/go\.(mod|sum)$
 ^tools/test-server$
 ^tools/ci-live
+^tests/testthat/fixtures/spark$
+^tools/ci-spark
+^README\.Rmd$

@@ -66,3 +66,6 @@ sent_header <- function(req, name) {
 failing_channel <- function(class) {
   mock_channel(function(req) stop(zuhttp::zu_condition(class, "boom")))
 }
+
+# A response body of whole messages, one per argument.
+stream_body <- function(...) do.call(c, lapply(list(...), wire_message))

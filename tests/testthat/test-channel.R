@@ -85,3 +85,39 @@ test_that("a channel prints its authority, transport and state", {
     print(grpc_channel("https://spark.example.org:443"))
   })
 })
+
+test_that("keepalive defaults to Spark's 60 and 20 seconds, in the pool", {
+  ch <- grpc_channel("http://localhost:1")
+  expect_identical(ch$client$pool$keepalive_time_ms, 60000L)
+  expect_identical(ch$client$pool$keepalive_timeout_ms, 20000L)
+  expect_identical(ch$stream_client$pool$keepalive_time_ms, 60000L)
+
+  base <- zuhttp::zu_client(pool = zuhttp::zu_pool(max_idle = 3L))
+  ch <- grpc_channel(
+    "http://localhost:1",
+    keepalive = grpc_keepalive(time = 5, timeout = 2),
+    client = base
+  )
+  expect_identical(ch$client$pool$max_idle, 3L)
+  expect_identical(ch$client$pool$keepalive_time_ms, 5000L)
+  expect_identical(ch$client$pool$keepalive_timeout_ms, 2000L)
+
+  ch <- grpc_channel("http://localhost:1", keepalive = NULL)
+  expect_identical(ch$client$pool$keepalive_time_ms, 0L)
+
+  ch <- grpc_channel(
+    "http://localhost:1",
+    client = zuhttp::zu_client(pool = NULL)
+  )
+  expect_null(ch$client$pool)
+})
+
+test_that("grpc_keepalive() validates and prints", {
+  expect_error(grpc_keepalive(time = 0), class = "zugrpc_error_argument")
+  expect_error(grpc_keepalive(timeout = NA), class = "zugrpc_error_argument")
+  expect_error(
+    grpc_channel("http://localhost:1", keepalive = list(time = 1)),
+    class = "zugrpc_error_argument"
+  )
+  expect_snapshot(print(grpc_keepalive(time = 30, timeout = 10)))
+})

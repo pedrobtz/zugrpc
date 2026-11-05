@@ -17,6 +17,10 @@
 #'   replaces a channel header of the same name.
 #' @param tls Certificate trust settings from [zuhttp::zu_tls()], for an
 #'   `https://` URL.
+#' @param keepalive HTTP/2 keepalive from [grpc_keepalive()], or `NULL` for
+#'   none. The default sends a PING on a connection idle for 60 seconds and
+#'   replaces it if no answer comes within 20, as Spark Connect's Python
+#'   client does.
 #' @param max_message The largest response message accepted, in bytes. The
 #'   default, 128 MiB, is Spark Connect's. A larger message fails the call
 #'   with `RESOURCE_EXHAUSTED`.
@@ -36,6 +40,7 @@ grpc_channel <- function(
   url,
   headers = NULL,
   tls = NULL,
+  keepalive = grpc_keepalive(),
   max_message = 128 * 1024^2,
   client = NULL
 ) {
@@ -57,6 +62,9 @@ grpc_channel <- function(
   if (!is.null(client) && !inherits(client, "zu_client")) {
     zugrpc_abort("argument", "`client` must be a zuhttp::zu_client().")
   }
+  if (!is.null(keepalive) && !inherits(keepalive, "zugrpc_keepalive")) {
+    zugrpc_abort("argument", "`keepalive` must come from grpc_keepalive().")
+  }
 
   settings <- list(
     http2 = "required",
@@ -73,6 +81,7 @@ grpc_channel <- function(
   } else {
     do.call(zuhttp::zu_client_update, c(list(client), settings))
   }
+  client <- with_keepalive(client, keepalive)
 
   ch <- new.env(parent = emptyenv())
   ch$origin <- target$origin
@@ -162,10 +171,76 @@ check_channel <- function(channel, open = TRUE) {
   invisible(channel)
 }
 
+# Built once per session: packageVersion() takes about a millisecond, which
+# is more than the rest of a unary call's own work (design §11).
 user_agent <- function() {
-  sprintf(
-    "zugrpc/%s zuhttp/%s",
-    utils::packageVersion("zugrpc"),
-    utils::packageVersion("zuhttp")
+  if (is.null(rpc_env$user_agent)) {
+    rpc_env$user_agent <- sprintf(
+      "zugrpc/%s zuhttp/%s",
+      utils::packageVersion("zugrpc"),
+      utils::packageVersion("zuhttp")
+    )
+  }
+  rpc_env$user_agent
+}
+
+#' HTTP/2 keepalive settings
+#'
+#' A channel's connection can sit idle between calls, and a server or a
+#' middlebox may drop it without saying so. With keepalive, a connection
+#' idle for `time` seconds is sent an HTTP/2 PING before its next call, and
+#' replaced by a new one if no answer comes within `timeout` seconds.
+#'
+#' @param time Seconds of idleness before a PING.
+#' @param timeout Seconds to wait for the answer.
+#'
+#' @return A `zugrpc_keepalive`, for [grpc_channel()].
+#' @export
+#' @examples
+#' grpc_keepalive()
+#' grpc_keepalive(time = 30, timeout = 10)
+grpc_keepalive <- function(time = 60, timeout = 20) {
+  for (arg in list(list("time", time), list("timeout", timeout))) {
+    v <- arg[[2L]]
+    if (!is.numeric(v) || length(v) != 1L || !is.finite(v) || v <= 0) {
+      zugrpc_abort(
+        "argument",
+        sprintf("`%s` must be one positive number of seconds.", arg[[1L]])
+      )
+    }
+  }
+  structure(
+    list(time = as.numeric(time), timeout = as.numeric(timeout)),
+    class = "zugrpc_keepalive"
+  )
+}
+
+#' @export
+print.zugrpc_keepalive <- function(x, ...) {
+  cat(sprintf(
+    "<zugrpc_keepalive> PING after %gs idle, answer within %gs\n",
+    x$time,
+    x$timeout
+  ))
+  invisible(x)
+}
+
+# Keepalive is a setting of zuhttp's pool (its §65.6). The client's other
+# pool settings are kept; a client with no pool has no idle connection to
+# keep alive.
+with_keepalive <- function(client, keepalive) {
+  pool <- client$pool
+  if (is.null(pool)) {
+    return(client)
+  }
+  zuhttp::zu_client_update(
+    client,
+    pool = zuhttp::zu_pool(
+      max_idle = pool$max_idle,
+      max_per_host = pool$max_per_host,
+      idle_timeout = pool$idle_timeout_ms / 1000,
+      keepalive_time = keepalive$time,
+      keepalive_timeout = keepalive$timeout
+    )
   )
 }

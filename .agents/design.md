@@ -242,6 +242,12 @@ SETTINGS, PING and GOAWAY are `zuhttp`'s (§7.2); the channel passes
 to answer, as in Spark's Python client. A GOAWAY fails in-flight calls
 with `UNAVAILABLE`; the next call opens a new connection.
 
+*Decided 2026-11-05 (Stage 5):* `keepalive` takes `grpc_keepalive(time,
+timeout)`, whose defaults are 60 and 20 seconds, and `NULL` turns it off.
+It becomes zuhttp's `zu_pool(keepalive_time, keepalive_timeout)` (its
+§65.6). The other pool settings of a caller's client are kept, and a
+client with no pool is left as it is.
+
 *Decided 2026-11-05 (Stage 2):* `grpc_channel()` takes `client =`, a
 `zu_client()` the caller built (Q4). The channel derives its own client
 from it with `zu_client_update()`, setting `http2 = "required"`,
@@ -639,7 +645,15 @@ interrupt, `zu_interrupted_error`, is `zugrpc_error_interrupt` with
   `ZU_H2_TEST_SERVER`, and each live test skips unless its own is set.
   Schannel cannot take a private CA yet (zuhttp#5), so on Windows the
   TLS tests turn verification off; they test ALPN, and trust is
-  zuhttp's to test.
+  zuhttp's to test. *Decided 2026-11-05 (Stage 5):* the Spark test is a
+  job of `live.yaml` on Ubuntu, the one runner with Docker: the
+  `apache/spark:4.2.1` image runs `start-connect-server.sh` in the
+  foreground, and `ZU_SPARK_TEST_SERVER` points at it. Its messages are
+  encoded with zuproto against a descriptor set that
+  `tools/gen-spark-descriptors.sh` builds from Spark's Connect protos at
+  tag `v4.2.1`; the set is test-only and left out of the tarball. Spark
+  sends `ResultComplete` only to a reattachable execution, so the test
+  asserts the rows and the `OK` status instead.
 - **Hostile input, at this layer.** A declared length above
   `max_message`, a compressed flag with no encoding, trailers with no
   `grpc-status`, a `grpc-status-details-bin` that is not base64 or not
@@ -654,7 +668,11 @@ interrupt, `zu_interrupted_error`, is `zugrpc_error_interrupt` with
 ## 11. Performance targets
 
 Measured in Stage 5 and recorded in an article; nothing is claimed
-before it is measured. The targets: a unary call over loopback h2c
+before it is measured. *Measured 2026-11-05 (Stage 5)* by
+`tools/bench.R`, reported in `vignettes/articles/performance.Rmd`: all
+four are met. Measuring found the user-agent string costing a
+millisecond per call (`packageVersion()`); it is now built once per
+session. The targets: a unary call over loopback h2c
 under 1 ms of `zugrpc` overhead above `zu_perform()`; streaming 1 GiB
 of 16 MiB messages with the iterator holding at most one message plus
 one chunk; a 100,000-message stream of small messages with one raw
