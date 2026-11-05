@@ -1,4 +1,4 @@
-# Recorded from tools/status-server (grpc-go v1.67.1): /zugrpc.test.Status/Spark
+# Recorded from tools/test-server (grpc-go v1.67.1): /zugrpc.test.Status/Spark
 # Regenerate with tools/record-fixtures.R; do not edit by hand.
 list(request = list(method = "/zugrpc.test.Status/Spark", body = as.raw(c(0x00, 
 0x00, 0x00, 0x00, 0x00)), metadata = NULL), response = list(status = 200L, 

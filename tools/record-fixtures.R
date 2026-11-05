@@ -1,12 +1,12 @@
 # Records the unary responses that the tests replay.
 #
 # Run from the package root against grpc-go's interop server, built from the
-# pinned tag, and the status-details server in tools/status-server, which
+# pinned tag, and the status-details server in tools/test-server, which
 # uses the same grpc-go version:
 #
 #   go install google.golang.org/grpc/interop/server@v1.67.1
 #   server --port 50051 &
-#   (cd tools && go run ./status-server -port 50052) &
+#   (cd tools && go run ./test-server -grpc_port 50052) &
 #   Rscript tools/record-fixtures.R localhost:50051 localhost:50052
 #
 # Each fixture is one `dput()` text file in tests/testthat/fixtures/unary/
@@ -147,6 +147,6 @@ for (name in c("Spark", "Every")) {
     paste0("/zugrpc.test.Status/", name),
     authority = details,
     dir = "details",
-    server = "tools/status-server (grpc-go v1.67.1)"
+    server = "tools/test-server (grpc-go v1.67.1)"
   )
 }
