@@ -7,6 +7,7 @@
 #   ZU_GRPC_TEST_STATUS  tools/test-server's gRPC port (h2c)
 #   ZU_GRPC_TEST_H1_TLS  tools/test-server's TLS port that offers http/1.1 only
 #   ZU_H2_TEST_SERVER    a plain HTTP/2 server (h2c) that is not gRPC
+#   ZU_SPARK_TEST_SERVER a Spark Connect server (h2c), in test-spark.R
 live_server <- function(var) {
   skip_on_cran()
   value <- Sys.getenv(var)
