@@ -34,9 +34,11 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      # A current toolchain, not tools/go.mod's minimum: macOS's dyld refuses
+      # binaries without LC_UUID, which Go 1.22's linker does not write.
       - uses: actions/setup-go@v5
         with:
-          go-version-file: tools/go.mod
+          go-version: "1.27"
           cache-dependency-path: tools/go.sum
 
       - uses: r-lib/actions/setup-r@v2
