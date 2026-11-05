@@ -8,12 +8,10 @@ vignette: >
 ---
 
 ```{r, include = FALSE}
-# Not evaluated: written from .agents/design.md before the API exists.
-# Switch eval on, and check the output, once the functions are in.
-knitr::opts_chunk$set(collapse = TRUE, comment = "#>", eval = FALSE)
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
 ```
 
-```{r setup, eval = TRUE}
+```{r setup}
 library(zugrpc)
 ```
 
@@ -24,18 +22,62 @@ protocol on top of zuhttp's HTTP/2. You bring the request message,
 encoded with zuproto, and get back the response message, its metadata and
 its status. Calls can be unary or server-streaming.
 
+```{r fake-server, include = FALSE}
+# A fake gRPC server, so that this article runs anywhere: zuhttp's mock
+# transport answers each request as a server would, framing included.
+frame <- function(text) {
+  bytes <- charToRaw(text)
+  n <- length(bytes)
+  c(as.raw(c(0, n %/% 2^24, n %/% 2^16 %% 256, n %/% 256 %% 256, n %% 256)), bytes)
+}
+answer <- function(req) {
+  ok <- function(body) {
+    zuhttp::zu_response(
+      200L,
+      headers = c("content-type" = "application/grpc+proto", "x-served-by" = "fake"),
+      body = body,
+      trailers = c("grpc-status" = "0")
+    )
+  }
+  switch(
+    sub(".*/", "", req$url),
+    SayHello = ok(frame(paste0("hello, ", rawToChar(req$body[-(1:5)])))),
+    Count = ok(do.call(c, lapply(c("one", "two", "three"), frame))),
+    zuhttp::zu_response(
+      200L,
+      headers = c(
+        "content-type" = "application/grpc+proto",
+        "grpc-status" = "5",
+        "grpc-message" = "no%20such%20greeting"
+      )
+    )
+  )
+}
+fake <- zuhttp::zu_client(transport = zuhttp::zu_mock_transport(answer))
+```
+
+This article talks to a fake server, built in a hidden chunk with zuhttp's
+mock transport, so that it runs anywhere. Its messages are plain text
+rather than protobuf, to keep the output readable. Against a real server,
+leave out `client = fake`.
+
 ## Open a channel
 
-A channel holds the connection to one server. An `http://` URL is
+A channel holds what every call to one server shares. An `http://` URL is
 cleartext HTTP/2, for a local server. An `https://` URL negotiates HTTP/2
-over TLS.
+over TLS, with trust settings from `zuhttp::zu_tls()`.
 
 ```{r}
-ch <- grpc_channel("http://localhost:15002")
+ch <- grpc_channel("http://localhost:50051", client = fake)
+ch
+```
 
-ch <- grpc_channel(
+`headers` go on every call, `keepalive` keeps an idle connection checked,
+and `max_message` limits the size of a response message.
+
+```{r, eval = FALSE}
+grpc_channel(
   "https://spark.example.org:443",
-  tls = zuhttp::zu_tls(ca_file = NULL),
   headers = c(authorization = "Bearer ..."),
   keepalive = grpc_keepalive(time = 60, timeout = 20),
   max_message = 128 * 1024^2
@@ -45,84 +87,96 @@ ch <- grpc_channel(
 ## Make a unary call
 
 A unary call sends one request message and returns one response message.
-The request is a raw vector, typically from `zuproto::proto_encode()`.
-The deadline is in seconds, or an absolute `POSIXct`.
+The request is a raw vector, usually from `zuproto::proto_encode()`. The
+deadline is in seconds, or an absolute `POSIXct`.
 
 ```{r}
 res <- grpc_call(
-  ch, "/spark.connect.SparkConnectService/AnalyzePlan",
-  request = req_bytes,
-  metadata = c("x-user-agent" = "zuspark"),
+  ch, "/demo.Greeter/SayHello",
+  request = charToRaw("world"),
+  metadata = c("x-request-id" = "42"),
   deadline = 30
 )
-res$message
+rawToChar(res$message)
 res$headers
-res$trailers
 res$status
 ```
 
 ## Stream the responses
 
 A server-streaming call returns a stream. Each `$next_message()` returns
-one response message, and `NULL` at the end. The server only sends more
-as you read.
+one response message, and `NULL` at the end. The server only sends as far
+ahead as you read.
 
 ```{r}
-st <- grpc_stream(
-  ch, "/spark.connect.SparkConnectService/ExecutePlan",
-  request = req_bytes, deadline = 600
-)
-st$headers()
+st <- grpc_stream(ch, "/demo.Greeter/Count", request = raw(), deadline = 600)
 while (!is.null(m <- st$next_message())) {
-  zuproto::proto_decode(m, type, pool)
+  print(rawToChar(m))
 }
-st$trailers()
 st$status()
 ```
 
-Cancel a stream you no longer need. A second cancel does nothing.
+Cancel a stream you no longer need. The connection stays open for other
+calls, and a second cancel does nothing.
 
 ```{r}
+st <- grpc_stream(ch, "/demo.Greeter/Count", request = raw())
+rawToChar(st$next_message())
 st$cancel()
 ```
 
 ## Handle errors
 
-A call that ends with a non-OK status raises a `zugrpc_error_status`
-condition. Its class also carries the status, so you can catch one code.
-The `details` field holds the decoded `google.rpc.Status`.
+A call that ends with a status other than `OK` raises a
+`zugrpc_error_status` condition. Its class also carries the status, so
+you can catch one code.
 
 ```{r}
 tryCatch(
-  grpc_call(ch, "/spark.connect.SparkConnectService/AnalyzePlan",
-            request = req_bytes),
-  zugrpc_error_unavailable = function(cnd) {
-    cnd$message
-  },
+  grpc_call(ch, "/demo.Greeter/SayGoodbye", request = raw()),
+  zugrpc_error_not_found = function(cnd) {
+    cnd$grpc_message
+  }
+)
+```
+
+The condition's `details` field holds the decoded `google.rpc.Status`,
+with error details such as `ErrorInfo` unpacked. Spark Connect puts its
+error class and SQL state there:
+
+```{r, eval = FALSE}
+tryCatch(
+  grpc_stream(spark, "/spark.connect.SparkConnectService/ExecutePlan",
+              request = bad_plan)$next_message(),
   zugrpc_error_status = function(cnd) {
-    cnd$details
+    cnd$details$details$ErrorInfo$metadata[["errorClass"]]
   }
 )
 ```
 
 `grpc_status_codes()` lists the codes a call can end with.
 
-```{r, eval = TRUE}
+```{r}
 grpc_status_codes()
 ```
 
 ## Close and inspect
 
-Closing a channel cancels its open streams. `zugrpc_info()` reports the
-zuhttp version, whether it offers HTTP/2 and its TLS backend.
+Closing a channel cancels its open streams.
 
 ```{r}
 grpc_close(ch)
+```
+
+`zugrpc_info()` reports the zuhttp version, whether it speaks HTTP/2 and
+its TLS backend.
+
+```{r}
 zugrpc_info()
 ```
 
 ## Next
 
-See the [function reference](../reference/index.html) for every function.
-Stage 5 of the design adds an article on performance, measured against
-its targets.
+See the [function reference](../reference/index.html) for every function,
+and the [performance article](performance.html) for what a call
+costs.

@@ -1,0 +1,63 @@
+---
+title: "Performance"
+---
+
+```{r, include = FALSE}
+# Not evaluated: the numbers come from tools/bench.R, which needs live
+# servers. Rerun it and update the table when the code it measures changes.
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", eval = FALSE)
+```
+
+zugrpc is R on top of zuhttp, so most of a call's time is zuhttp's and the
+server's. The design sets four targets for what zugrpc itself adds. This
+article reports a measurement for each.
+
+## How it was measured
+
+`tools/bench.R` ran against grpc-go's interop server at v1.67.1 and
+`tools/test-server`, both over cleartext HTTP/2 on loopback. The machine
+was an Intel Mac running macOS Sequoia 15.7, with R 4.5.2, zugrpc
+0.0.0.9000 and zuhttp 0.1.0, on 2026-11-05.
+
+```{r}
+# go install google.golang.org/grpc/interop/server@v1.67.1
+# server --port 50051 &
+# (cd tools && go run ./test-server -grpc_port 50052) &
+Rscript tools/bench.R http://127.0.0.1:50051 http://127.0.0.1:50052
+```
+
+## Results
+
+| Target | Measured | Met |
+| --- | --- | --- |
+| A unary call adds under 1 ms to `zu_perform()` | 0.33 ms (median of 2,000 `EmptyCall`s: 0.98 ms against 0.65 ms) | yes |
+| Streaming 1 GiB of 16 MiB messages holds at most one message and one chunk | at most 16 MiB live in R | yes |
+| 100,000 small messages cost no more each than 10,000 | 19.6 µs each against 23.2 µs | yes |
+| `$cancel()` returns within 100 ms of a stalled server | 0.075 ms median, 0.113 ms worst of 20 | yes |
+
+## What the numbers mean
+
+**Unary overhead.** Each `EmptyCall` ran on the same pooled connection,
+once through `zu_perform()` and once through `grpc_call()`, alternating.
+The difference is zugrpc's work: building the headers, framing the
+message, and checking the status and framing of the response. An early
+version spent a millisecond more on every call, rebuilding its user-agent
+string with `packageVersion()`. It now builds it once per session.
+
+**Large messages.** "Live" is the memory reachable after a full garbage
+collection, taken after each message, above what was live before the
+call. It never exceeded one 16 MiB message. The stream keeps the pieces
+of a message in a list and joins them once, when the message is
+complete, so a large message is not copied once per read. The peak heap
+over the run was higher, 152 MiB, because R collects garbage lazily: the
+joined buffers of earlier messages wait for a collection. Throughput was
+1 GiB in 13 s, including the collection forced after each message.
+
+**Small messages.** The cost per message stayed flat from 10,000 to
+100,000 messages. A stream that re-joined its whole buffer on each read
+would cost more per message as the stream grew. The 64 KiB reads bring
+in many small messages at once, and they are split out in one pass.
+
+**Cancel.** `$cancel()` resets the HTTP/2 stream with `RST_STREAM(CANCEL)`
+and returns. It does not wait for the server, so a stalled server does not
+slow it down. The connection stays pooled for the next call.

@@ -10,6 +10,9 @@ results <- as.data.frame(testthat::test_dir(
 ))
 live <- results[results$file == "test-live.R", ]
 if (nrow(live) == 0L || any(live$skipped)) {
-  stop("live tests were skipped: ", paste(live$test[live$skipped], collapse = "; "))
+  stop(
+    "live tests were skipped: ",
+    paste(live$test[live$skipped], collapse = "; ")
+  )
 }
 cat(sprintf("%d live tests ran\n", nrow(live)))
