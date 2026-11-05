@@ -18,3 +18,4 @@
 ^tools/ci-live
 ^tests/testthat/fixtures/spark$
 ^tools/ci-spark
+^README\.Rmd$
