@@ -38,8 +38,19 @@ condition instead of returning.
 A non-\code{OK} status raises \code{zugrpc_error_status}, whose class also carries
 the status as \verb{zugrpc_error_<name>}, for example
 \code{zugrpc_error_unavailable}. Its fields are \code{grpc_status}, \code{grpc_code},
-\code{grpc_message}, \code{http_status}, \code{method}, \code{headers} and \code{trailers}. A
-response that is not gRPC, or breaks its framing, raises
+\code{grpc_message}, \code{details}, \code{http_status}, \code{method}, \code{headers} and
+\code{trailers}. \code{details} is the decoded \code{google.rpc.Status} from the
+\code{grpc-status-details-bin} trailer, or \code{NULL} when there is none: a list of
+\code{code}, \code{message} and \code{details}. Its \code{details} are the decoded error
+details, named by type, such as \code{ErrorInfo} with its \code{reason}, \code{domain}
+and \code{metadata}. A trailer that does not decode gives a
+\code{zugrpc_warning_details} warning, and \code{details} is \code{NULL}.
+
+A failure below gRPC, such as a refused connection or a TLS error,
+raises \code{zugrpc_error_transport}, which is also \code{zugrpc_error_unavailable}.
+The \code{zuhttp} condition is its \code{parent}. A local timeout is
+\code{DEADLINE_EXCEEDED}, and an interrupt raises \code{zugrpc_error_interrupt}.
+A response that is not gRPC, or breaks its framing, raises
 \code{zugrpc_error_protocol}. See \code{\link[=grpc_status_codes]{grpc_status_codes()}}.
 }
 

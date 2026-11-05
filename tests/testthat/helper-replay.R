@@ -1,7 +1,7 @@
-# A recorded response from tests/testthat/fixtures/unary/, written by
+# A recorded response from tests/testthat/fixtures/<dir>/, written by
 # tools/record-fixtures.R against grpc-go's interop server.
-read_fixture <- function(name) {
-  dget(test_path("fixtures", "unary", paste0(name, ".dput")))
+read_fixture <- function(name, dir = "unary") {
+  dget(test_path("fixtures", dir, paste0(name, ".dput")))
 }
 
 # A channel whose zuhttp client answers every request with `respond(req)`,
@@ -60,4 +60,9 @@ grpc_response <- function(
 sent_header <- function(req, name) {
   h <- req$headers
   unname(h[tolower(names(h)) == name])
+}
+
+# A channel whose zuhttp transport fails with the zuhttp condition `class`.
+failing_channel <- function(class) {
+  mock_channel(function(req) stop(zuhttp::zu_condition(class, "boom")))
 }

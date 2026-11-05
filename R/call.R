@@ -26,8 +26,19 @@
 #' A non-`OK` status raises `zugrpc_error_status`, whose class also carries
 #' the status as `zugrpc_error_<name>`, for example
 #' `zugrpc_error_unavailable`. Its fields are `grpc_status`, `grpc_code`,
-#' `grpc_message`, `http_status`, `method`, `headers` and `trailers`. A
-#' response that is not gRPC, or breaks its framing, raises
+#' `grpc_message`, `details`, `http_status`, `method`, `headers` and
+#' `trailers`. `details` is the decoded `google.rpc.Status` from the
+#' `grpc-status-details-bin` trailer, or `NULL` when there is none: a list of
+#' `code`, `message` and `details`. Its `details` are the decoded error
+#' details, named by type, such as `ErrorInfo` with its `reason`, `domain`
+#' and `metadata`. A trailer that does not decode gives a
+#' `zugrpc_warning_details` warning, and `details` is `NULL`.
+#'
+#' A failure below gRPC, such as a refused connection or a TLS error,
+#' raises `zugrpc_error_transport`, which is also `zugrpc_error_unavailable`.
+#' The `zuhttp` condition is its `parent`. A local timeout is
+#' `DEADLINE_EXCEEDED`, and an interrupt raises `zugrpc_error_interrupt`.
+#' A response that is not gRPC, or breaks its framing, raises
 #' `zugrpc_error_protocol`. See [grpc_status_codes()].
 #'
 #' @export
@@ -73,7 +84,10 @@ grpc_call <- function(
   if (!is.null(seconds)) {
     req <- zuhttp::zu_req_timeout(req, total = seconds)
   }
-  res <- zuhttp::zu_perform(req, client = channel$client)
+  res <- tryCatch(
+    zuhttp::zu_perform(req, client = channel$client),
+    zuhttp_error = function(cnd) transport_abort(cnd, method)
+  )
 
   unary_result(
     http_status = zuhttp::zu_resp_status(res),
@@ -99,13 +113,13 @@ unary_result <- function(
 ) {
   headers <- lower_names(headers)
   trailers <- lower_names(trailers)
-  status_value <- field(trailers, "grpc-status")
-  message_value <- field(trailers, "grpc-message")
   # Trailers-Only: the status arrives in the one HEADERS block.
-  if (is.null(status_value) && length(body) == 0L) {
-    status_value <- field(headers, "grpc-status")
-    message_value <- field(headers, "grpc-message")
+  status_fields <- trailers
+  if (is.null(field(trailers, "grpc-status")) && length(body) == 0L) {
+    status_fields <- headers
   }
+  status_value <- field(status_fields, "grpc-status")
+  message_value <- field(status_fields, "grpc-message")
 
   if (is.null(status_value)) {
     if (http_status != 200L) {
@@ -130,6 +144,9 @@ unary_result <- function(
     status_abort(
       status$name,
       msg,
+      details = status_details_decode(
+        field(status_fields, "grpc-status-details-bin")
+      ),
       http_status = http_status,
       method = method,
       headers = metadata_decode(user_metadata(headers)),
