@@ -45,3 +45,10 @@ test_that("deadline_seconds() rejects bad deadlines", {
     expect_error(deadline_seconds(d), class = "zugrpc_error_argument")
   }
 })
+
+test_that("grpc_timeout() keeps a unit up to exactly eight digits", {
+  expect_identical(grpc_timeout(0.099999999), "99999999n")
+  expect_identical(grpc_timeout(0.1), "100000u")
+  expect_identical(grpc_timeout(99999.999), "99999999m")
+  expect_identical(grpc_timeout(100000), "100000S")
+})

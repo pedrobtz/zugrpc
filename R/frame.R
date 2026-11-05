@@ -7,11 +7,11 @@ default_max_message <- 128 * 1024^2
 # a four-byte big-endian length, then the bytes.
 frame_encode <- function(message) {
   if (!is.raw(message)) {
-    zugrpc_abort("argument", "A request message must be a raw vector.")
+    zugrpc_abort("argument", "`request` must be a raw vector.")
   }
   n <- length(message)
   if (n > 4294967295) {
-    zugrpc_abort("argument", "A message cannot exceed 4 GiB.")
+    zugrpc_abort("argument", "`request` must be at most 4 GiB.")
   }
   prefix <- as.raw(c(
     0,
@@ -124,7 +124,7 @@ check_method <- function(method) {
   if (!ok) {
     zugrpc_abort(
       "argument",
-      "A method must be one string of the form \"/package.Service/Method\"."
+      "`method` must be one string of the form \"/package.Service/Method\"."
     )
   }
   method

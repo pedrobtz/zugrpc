@@ -153,7 +153,7 @@ parse_target <- function(url) {
   if (length(m) != 3L) {
     zugrpc_abort(
       "argument",
-      "A channel URL must be one string of the form http://host:port or https://host:port."
+      "`url` must be one string, http://host:port or https://host:port."
     )
   }
   scheme <- tolower(m[2L])

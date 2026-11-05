@@ -70,7 +70,10 @@ metadata_value <- function(name, value) {
     zugrpc_abort(
       "argument",
       sprintf(
-        "Metadata '%s' must be one string of printable ASCII; use a -bin name for bytes.",
+        paste0(
+          "Metadata '%s' must be one string of printable ASCII; ",
+          "use a -bin name for bytes."
+        ),
         name
       )
     )

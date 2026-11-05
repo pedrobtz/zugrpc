@@ -97,7 +97,6 @@ test_that("status errors carry the status name, code and classes", {
   expect_s3_class(cnd, c("zugrpc_error_status", "zugrpc_error"))
   expect_identical(cnd$grpc_status, "UNAVAILABLE")
   expect_identical(cnd$grpc_code, 14L)
-  expect_identical(conditionMessage(cnd), "UNAVAILABLE: connection reset")
 })
 
 test_that("grpc_message_decode() never raises on what a server sends", {

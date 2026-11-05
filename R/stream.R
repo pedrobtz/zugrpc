@@ -185,7 +185,11 @@ stream_next <- function(st) {
       stream_finish(st, abort = TRUE)
       stream_fail(
         st,
-        status_error("DEADLINE_EXCEEDED", "deadline exceeded", method = st$method)
+        status_error(
+          "DEADLINE_EXCEEDED",
+          "deadline exceeded",
+          method = st$method
+        )
       )
     }
     chunk <- stream_guard(st, resp_read(st$res, read_size(st)))
@@ -361,4 +365,3 @@ unregister_stream <- function(channel, id) {
     rm(list = id, envir = channel$streams)
   }
 }
-
