@@ -18,7 +18,7 @@ descriptor set moves from Stage 0 to Stage 3, the stage that first uses it.
 | 0 | [Package identity](#stage-0--package-identity) | quick | [#2](https://github.com/pedrobtz/zugrpc/issues/2) | [#13](https://github.com/pedrobtz/zugrpc/pull/13) | 2026-11-03 |
 | 1 | [Framing](#stage-1--framing) | quick | [#3](https://github.com/pedrobtz/zugrpc/issues/3) | [#14](https://github.com/pedrobtz/zugrpc/pull/14) | 2026-11-03 |
 | 2 | [Unary calls on recorded responses](#stage-2--unary-calls-on-recorded-responses) | quick | [#4](https://github.com/pedrobtz/zugrpc/issues/4) | [#15](https://github.com/pedrobtz/zugrpc/pull/15) | 2026-11-05 |
-| 3 | [Status details and conditions](#stage-3--status-details-and-conditions) | quick | [#5](https://github.com/pedrobtz/zugrpc/issues/5) | | |
+| 3 | [Status details and conditions](#stage-3--status-details-and-conditions) | quick | [#5](https://github.com/pedrobtz/zugrpc/issues/5) | | 2026-11-05 |
 | 4 | [Live HTTP/2 and streaming](#stage-4--live-http2-and-streaming) | full | [#6](https://github.com/pedrobtz/zugrpc/issues/6) | | |
 | 5 | [Spark, keepalive and performance](#stage-5--spark-keepalive-and-performance) | quick | [#7](https://github.com/pedrobtz/zugrpc/issues/7) | | |
 | 6 | [Full CI](#stage-6--full-ci) | full | [#8](https://github.com/pedrobtz/zugrpc/issues/8) | | |
