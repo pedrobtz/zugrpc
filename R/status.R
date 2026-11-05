@@ -105,20 +105,25 @@ status_from_http <- function(http_status) {
 }
 
 # `grpc-message` is percent-encoded UTF-8. Malformed escapes stay as they
-# are, and a result that is not valid UTF-8 falls back to the text as
-# received, so a decoding problem never hides the status.
+# are, and a result that is a NUL or not valid UTF-8 falls back to the text
+# as received, so a decoding problem never hides the status (§6.5).
 grpc_message_decode <- function(value) {
   if (is.null(value) || length(value) == 0L || is.na(value[1L])) {
     return("")
   }
   value <- value[1L]
-  if (!grepl("%", value, fixed = TRUE)) {
+  if (!grepl("%", value, fixed = TRUE, useBytes = TRUE)) {
     return(value)
   }
+  tryCatch(percent_decode(value), error = function(e) value)
+}
+
+hex_digits <- as.raw(c(0x30:0x39, 0x41:0x46, 0x61:0x66))
+
+percent_decode <- function(value) {
   bytes <- charToRaw(value)
   out <- raw(length(bytes))
-  hex <- "0123456789abcdefABCDEF"
-  is_hex <- function(b) grepl(rawToChar(b), hex, fixed = TRUE)
+  is_hex <- function(b) b %in% hex_digits
   n <- length(bytes)
   i <- 1L
   j <- 0L
@@ -139,7 +144,11 @@ grpc_message_decode <- function(value) {
       i <- i + 1L
     }
   }
-  decoded <- rawToChar(out[seq_len(j)])
+  out <- out[seq_len(j)]
+  if (any(out == as.raw(0))) {
+    return(value)
+  }
+  decoded <- rawToChar(out)
   if (!validUTF8(decoded)) {
     return(value)
   }
