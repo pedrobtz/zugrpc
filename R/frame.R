@@ -1,17 +1,18 @@
 # The gRPC wire format (design §4 item 1, §6.2 to §6.4): pure functions over
 # raw vectors and character vectors. No I/O happens here.
 
+# grpc_channel()'s default max_message, which writes the same value out.
 default_max_message <- 128 * 1024^2
 
 # One length-prefixed message: a compressed-flag byte (always 0 in v0.1.0),
 # a four-byte big-endian length, then the bytes.
 frame_encode <- function(message) {
   if (!is.raw(message)) {
-    zugrpc_abort("argument", "A request message must be a raw vector.")
+    zugrpc_abort("argument", "`request` must be a raw vector.")
   }
   n <- length(message)
   if (n > 4294967295) {
-    zugrpc_abort("argument", "A message cannot exceed 4 GiB.")
+    zugrpc_abort("argument", "`request` must be at most 4 GiB.")
   }
   prefix <- as.raw(c(
     0,
@@ -21,6 +22,12 @@ frame_encode <- function(message) {
     n %% 256
   ))
   c(prefix, message)
+}
+
+# The message length a five-byte prefix declares, as a double: it can exceed
+# an integer.
+frame_length <- function(prefix) {
+  sum(as.numeric(prefix[2:5]) * c(16777216, 65536, 256, 1))
 }
 
 # Splits a buffer into its complete messages and the bytes of an incomplete
@@ -39,9 +46,7 @@ frame_split <- function(
   pos <- 1L
   while (n - pos + 1L >= 5L) {
     flag <- as.integer(buf[pos])
-    len <- sum(
-      as.numeric(buf[(pos + 1L):(pos + 4L)]) * c(16777216, 65536, 256, 1)
-    )
+    len <- frame_length(buf[pos:(pos + 4L)])
     check_flag(flag, encoding)
     if (len > max_message) {
       status_abort(
@@ -73,7 +78,7 @@ frame_split <- function(
 
 check_flag <- function(flag, encoding) {
   if (flag == 0L) {
-    return(invisible())
+    return(invisible(flag))
   }
   if (flag != 1L) {
     zugrpc_abort(
@@ -116,12 +121,14 @@ check_method <- function(method) {
   ok <- is.character(method) &&
     length(method) == 1L &&
     !is.na(method) &&
-    grepl("^/[^/]+/[^/]+$", method)
+    # Protobuf names: a dotted service and a method identifier, so nothing
+    # that changes the request path, such as `?` or `#`.
+    grepl("^/[A-Za-z_][A-Za-z0-9_.]*/[A-Za-z_][A-Za-z0-9_]*$", method)
   if (!ok) {
     zugrpc_abort(
       "argument",
-      "A method must be one string of the form \"/package.Service/Method\"."
+      "`method` must be one string of the form \"/package.Service/Method\"."
     )
   }
-  method
+  invisible(method)
 }

@@ -15,7 +15,9 @@ grpc_stream(channel, method, request, metadata = NULL, deadline = NULL)
 
 \item{metadata}{Request metadata: a named character vector, or a named
 list whose \code{-bin} entries are raw vectors. Names are lower-cased. Names
-starting with \verb{grpc-}, \code{te} and \code{content-type} are reserved.}
+starting with \verb{grpc-} or \code{:} are reserved, and so are \code{te},
+\code{content-type}, \code{host} and the connection headers HTTP/2 forbids, such
+as \code{connection}. A \code{user-agent} is sent before zugrpc's own.}
 
 \item{deadline}{Seconds from now, or an absolute \code{POSIXct}, by which the
 whole stream must end. It is sent as \code{grpc-timeout}. Locally it is
@@ -38,7 +40,9 @@ The stream is an object with five methods:
 \item \verb{$headers()} returns the initial metadata, a named list.
 \item \verb{$next_message()} returns the next message as a raw vector, or \code{NULL}
 at the end of the stream. It raises a condition, as \code{\link[=grpc_call]{grpc_call()}} does,
-when the call ends with a status other than \code{OK}.
+when the call ends with a status other than \code{OK}. A stream that fails
+any other way, such as a lost connection, a passed deadline or a broken
+message, raises the same condition again on every later call.
 \item \verb{$trailers()} returns the trailing metadata once \verb{$next_message()} has
 returned \code{NULL}, and \code{NULL} before.
 \item \verb{$status()} returns the final status name, such as \code{"OK"}, once the

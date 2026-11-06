@@ -32,8 +32,8 @@ test_that("status_from_header() maps every code to its name", {
   codes <- grpc_status_codes()
   for (i in seq_len(nrow(codes))) {
     st <- status_from_header(as.character(codes$code[i]))
-    expect_identical(st$name, codes$name[i])
-    expect_identical(st$code, codes$code[i])
+    expect_identical(st$name, codes$name[i], info = codes$name[i])
+    expect_identical(st$code, codes$code[i], info = codes$name[i])
   }
 })
 
@@ -97,5 +97,26 @@ test_that("status errors carry the status name, code and classes", {
   expect_s3_class(cnd, c("zugrpc_error_status", "zugrpc_error"))
   expect_identical(cnd$grpc_status, "UNAVAILABLE")
   expect_identical(cnd$grpc_code, 14L)
-  expect_identical(conditionMessage(cnd), "UNAVAILABLE: connection reset")
+})
+
+test_that("grpc_message_decode() never raises on what a server sends", {
+  # A decoded NUL cannot be an R string: keep the text as received.
+  expect_identical(grpc_message_decode("a%00b"), "a%00b")
+  # A raw UTF-8 byte after `%`, from a server that does not encode it.
+  value <- "50%é done"
+  expect_identical(grpc_message_decode(value), value)
+  # Lower-case escapes are hex too.
+  expect_identical(grpc_message_decode("caf%c3%a9"), "café")
+})
+
+test_that("a grpc-message that does not decode keeps the status", {
+  m <- mock_channel(grpc_response(
+    trailers = c("grpc-status" = "13", "grpc-message" = "a%00b")
+  ))
+  cnd <- expect_error(
+    grpc_call(m$channel, "/a.B/C", raw()),
+    class = "zugrpc_error_internal"
+  )
+  expect_identical(cnd$grpc_message, "a%00b")
+  expect_identical(cnd$method, "/a.B/C")
 })

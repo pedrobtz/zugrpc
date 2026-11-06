@@ -3,16 +3,21 @@
 //
 //   - -grpc_port: a gRPC server (h2c) whose methods are under
 //     /zugrpc.test.Status/: Spark and Every fail with google.rpc error
-//     details shaped as Spark Connect's ErrorUtils.scala builds them, and
-//     Stall sends its headers and then nothing until the client goes.
+//     details shaped as Spark Connect's ErrorUtils.scala builds them;
+//     Stall sends its headers and then nothing until the client goes;
+//     SlowStall sends one message after 600 ms and then stalls; and
+//     StreamFail streams two messages and then fails FAILED_PRECONDITION.
 //   - -h1_tls_port: a TLS server that offers ALPN http/1.1 only, so that
 //     a client requiring HTTP/2 must refuse it.
 //   - -h2_port: a plain HTTP/2 (h2c) server that is not gRPC, answering
-//     every request with 200 and text/html.
+//     every request with 200 and text/html, except /zugrpc.test.Reset/Mid,
+//     which starts a gRPC response, sends one message and resets the
+//     stream.
 //   - -cert_dir: writes ca.pem, cert.pem and key.pem, a CA and a
 //     certificate for localhost and 127.0.0.1 signed by it, then exits.
 //
-// tools/record-fixtures.R records the Spark and Every responses.
+// tools/record-fixtures.R records the Spark, Every and StreamFail
+// responses.
 //
 //	(cd tools && go run ./test-server -grpc_port 10002)
 package main
@@ -44,7 +49,27 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 )
+
+// stall waits a minute or until the client resets the stream, then ends
+// with OK. The client's grpc-timeout is ignored on purpose, so the deadline
+// a test sees is the one zugrpc enforces.
+func stall(stream grpc.ServerStream) error {
+	ctx := stream.Context()
+	end := time.After(time.Minute)
+	select {
+	case <-end:
+	case <-ctx.Done():
+		if ctx.Err() == context.DeadlineExceeded {
+			// The server-side deadline passed. Keep stalling: once it has,
+			// the context cannot report a later client reset, so this
+			// handler simply waits out its minute.
+			<-end
+		}
+	}
+	return status.Error(codes.OK, "")
+}
 
 func handle(stream grpc.ServerStream) error {
 	method, _ := grpc.MethodFromServerStream(stream)
@@ -85,25 +110,27 @@ func handle(stream grpc.ServerStream) error {
 		}
 		return st.Err()
 	case "/zugrpc.test.Status/Stall":
-		// Headers now, then nothing for a minute or until the client resets
-		// the stream. The client's grpc-timeout is ignored on purpose, so
-		// the deadline the test sees is the one zugrpc enforces.
+		// Headers now, then nothing.
 		if err := stream.SendHeader(metadata.Pairs("x-stall", "1")); err != nil {
 			return err
 		}
-		ctx := stream.Context()
-		end := time.After(time.Minute)
-		select {
-		case <-end:
-		case <-ctx.Done():
-			if ctx.Err() == context.DeadlineExceeded {
-				// The server-side deadline passed. Keep stalling: once it
-				// has, the context cannot report a later client reset, so
-				// this handler simply waits out its minute.
-				<-end
+		return stall(stream)
+	case "/zugrpc.test.Status/SlowStall":
+		// One message 600 ms in, then nothing: a stall after part of the
+		// deadline is used.
+		time.Sleep(600 * time.Millisecond)
+		if err := stream.SendMsg(wrapperspb.Bytes([]byte{1})); err != nil {
+			return err
+		}
+		return stall(stream)
+	case "/zugrpc.test.Status/StreamFail":
+		// Messages, then an error status in the trailers.
+		for _, b := range []byte{1, 2} {
+			if err := stream.SendMsg(wrapperspb.Bytes([]byte{b})); err != nil {
+				return err
 			}
 		}
-		return status.Error(codes.OK, "")
+		return status.Error(codes.FailedPrecondition, "stream end")
 	}
 	return status.Error(codes.Unimplemented, "unknown method "+method)
 }
@@ -193,6 +220,16 @@ func main() {
 	}
 
 	page := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/zugrpc.test.Reset/Mid" {
+			// A gRPC response that breaks off after one message: the
+			// panic makes the HTTP/2 server reset the stream.
+			w.Header().Set("Content-Type", "application/grpc")
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte{0, 0, 0, 0, 1, 7})
+			w.(http.Flusher).Flush()
+			time.Sleep(100 * time.Millisecond)
+			panic(http.ErrAbortHandler)
+		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		fmt.Fprintf(w, "<html><body>not gRPC: %s</body></html>\n", r.Proto)
 	})

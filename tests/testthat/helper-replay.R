@@ -1,7 +1,12 @@
 # A recorded response from tests/testthat/fixtures/<dir>/, written by
 # tools/record-fixtures.R against grpc-go's interop server.
+# Stream fixtures are gzipped; file() reads either.
 read_fixture <- function(name, dir = "unary") {
-  dget(test_path("fixtures", dir, paste0(name, ".dput")))
+  path <- test_path("fixtures", dir, paste0(name, ".dput"))
+  if (!file.exists(path)) {
+    path <- paste0(path, ".gz")
+  }
+  dget(path)
 }
 
 # A channel whose zuhttp client answers every request with `respond(req)`,
@@ -62,6 +67,24 @@ sent_header <- function(req, name) {
   unname(h[tolower(names(h)) == name])
 }
 
+# The contract with zuhttp's object layout ---------------------------------
+# zuhttp has no accessors for a request's timeout or a client's settings, so
+# these read its fields. They are the only place the tests do, so a zuhttp
+# refactor is fixed here.
+
+# The total timeout a request was sent with, in seconds.
+request_timeout <- function(req) req$policy$timeout
+
+# A setting of a zu_client(), such as "http2", "max_body" or "tls".
+client_setting <- function(client, name) client[[name]]
+
+# A setting of the client's pool, such as "keepalive_time_ms".
+pool_setting <- function(client, name) client$pool[[name]]
+
+# The environment holding the client's pool; two clients that share one
+# share their connections.
+pool_state <- function(client) attr(client, "pool_state")
+
 # A channel whose zuhttp transport fails with the zuhttp condition `class`.
 failing_channel <- function(class) {
   mock_channel(function(req) stop(zuhttp::zu_condition(class, "boom")))
@@ -69,3 +92,30 @@ failing_channel <- function(class) {
 
 # A response body of whole messages, one per argument.
 stream_body <- function(...) do.call(c, lapply(list(...), wire_message))
+
+# Counts the calls zugrpc makes to zuhttp's zu_resp_abort(), which sends
+# RST_STREAM, and zu_pool_reset(), which closes connections, while still
+# making them. Cancellation must abort exactly once and never reset (D8).
+# Streams other tests dropped are collected first, so that their finalisers
+# do not count here.
+local_zuhttp_spy <- function(env = parent.frame()) {
+  gc()
+  calls <- new.env(parent = emptyenv())
+  calls$abort <- 0L
+  calls$reset <- 0L
+  abort <- zuhttp::zu_resp_abort
+  reset <- zuhttp::zu_pool_reset
+  testthat::local_mocked_bindings(
+    zu_resp_abort = function(resp) {
+      calls$abort <- calls$abort + 1L
+      abort(resp)
+    },
+    zu_pool_reset = function(client) {
+      calls$reset <- calls$reset + 1L
+      reset(client)
+    },
+    .package = "zuhttp",
+    .env = env
+  )
+  calls
+}

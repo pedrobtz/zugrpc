@@ -71,15 +71,15 @@ test_that("every non-OK status raises its own class, from Trailers-Only", {
     name <- codes$name[codes$code == code]
     cnd <- expect_error(
       grpc_call(m$channel, fx$request$method, fx$request$body[-(1:5)]),
-      class = paste0("zugrpc_error_", tolower(name))
+      class = paste0("zugrpc_error_", tolower(name)),
+      info = name
     )
-    expect_s3_class(cnd, "zugrpc_error_status")
-    expect_s3_class(cnd, "zugrpc_error")
-    expect_identical(cnd$grpc_status, name)
-    expect_identical(cnd$grpc_code, code)
-    expect_identical(cnd$grpc_message, sprintf("status %d", code))
-    expect_identical(cnd$http_status, 200L)
-    expect_identical(cnd$method, fx$request$method)
+    expect_s3_class(cnd, c("zugrpc_error_status", "zugrpc_error"))
+    expect_identical(cnd$grpc_status, name, info = name)
+    expect_identical(cnd$grpc_code, code, info = name)
+    expect_identical(cnd$grpc_message, sprintf("status %d", code), info = name)
+    expect_identical(cnd$http_status, 200L, info = name)
+    expect_identical(cnd$method, fx$request$method, info = name)
   }
 })
 
@@ -114,12 +114,28 @@ test_that("a deadline becomes grpc-timeout and the request's timeout", {
   grpc_call(m$channel, "/a.B/C", raw(), deadline = 1.5)
   req <- m$seen$requests[[1L]]
   expect_identical(sent_header(req, "grpc-timeout"), "1500000u")
-  expect_identical(req$policy$timeout, 1.5)
+  expect_identical(request_timeout(req), 1.5)
 
   expect_error(
     grpc_call(m$channel, "/a.B/C", raw(), deadline = -1),
     class = "zugrpc_error_argument"
   )
+})
+
+test_that("no deadline sets no local timeout, not zuhttp's default", {
+  m <- mock_channel(grpc_response())
+  grpc_call(m$channel, "/a.B/C", raw())
+  grpc_stream(m$channel, "/a.B/C", raw())
+  for (req in m$seen$requests) {
+    expect_identical(request_timeout(req), Inf)
+  }
+})
+
+test_that("a deadline under a millisecond still bounds the request", {
+  # zuhttp counts in whole milliseconds and reads 0 as "its default".
+  m <- mock_channel(grpc_response())
+  grpc_call(m$channel, "/a.B/C", raw(), deadline = 0.0004)
+  expect_identical(request_timeout(m$seen$requests[[1L]]), 0.001)
 })
 
 test_that("call metadata replaces a channel header of the same name", {
@@ -194,9 +210,10 @@ test_that("a non-200 HTTP status with no grpc-status maps to a gRPC status", {
     ))
     cnd <- expect_error(
       grpc_call(m$channel, "/a.B/C", raw()),
-      class = paste0("zugrpc_error_", cases[[http]])
+      class = paste0("zugrpc_error_", cases[[http]]),
+      info = http
     )
-    expect_identical(cnd$http_status, as.integer(http))
+    expect_identical(cnd$http_status, as.integer(http), info = http)
   }
 })
 
@@ -285,4 +302,130 @@ test_that("text/html with status 200 is a protocol error with the body", {
   )
   expect_identical(cnd$content_type, "text/html; charset=utf-8")
   expect_identical(cnd$body, page[1:1024])
+})
+
+test_that("bad -bin metadata from a server is a warning, never the outcome", {
+  # An error status keeps its class.
+  m <- mock_channel(grpc_response(
+    trailers = c("grpc-status" = "14", "grpc-message" = "down", "x-bin" = "!!")
+  ))
+  expect_warning(
+    cnd <- expect_error(
+      grpc_call(m$channel, "/a.B/C", raw()),
+      class = "zugrpc_error_unavailable"
+    ),
+    class = "zugrpc_warning_metadata"
+  )
+  expect_identical(cnd$method, "/a.B/C")
+
+  # A successful call still succeeds, whether the value is in the headers or
+  # the trailers, and warns once for each.
+  m <- mock_channel(grpc_response(
+    headers = c("content-type" = "application/grpc", "h-bin" = "!!"),
+    trailers = c("grpc-status" = "0", "t-bin" = "!!", "t" = "v")
+  ))
+  warnings <- 0L
+  res <- withCallingHandlers(
+    grpc_call(m$channel, "/a.B/C", raw()),
+    zugrpc_warning_metadata = function(w) {
+      warnings <<- warnings + 1L
+      invokeRestart("muffleWarning")
+    }
+  )
+  expect_identical(warnings, 2L)
+  expect_identical(res$status, "OK")
+  expect_identical(res$trailers, list(t = "v"))
+})
+
+test_that("every failure of a call carries its method and HTTP status", {
+  responses <- list(
+    html = grpc_response(
+      body = charToRaw("<html>"),
+      trailers = NULL,
+      headers = c("content-type" = "text/html")
+    ),
+    flag = grpc_response(body = wire_message(as.raw(1), flag = 1L)),
+    gzip = grpc_response(
+      body = wire_message(as.raw(1), flag = 1L),
+      headers = c("content-type" = "application/grpc", "grpc-encoding" = "gzip")
+    ),
+    big = grpc_response(body = wire_message(raw(11)))
+  )
+  for (name in names(responses)) {
+    m <- mock_channel(responses[[name]], max_message = 10)
+    cnd <- expect_error(grpc_call(m$channel, "/a.B/C", raw()), info = name)
+    expect_identical(cnd$method, "/a.B/C", info = name)
+    expect_identical(cnd$http_status, 200L, info = name)
+  }
+})
+
+test_that("a status condition carries the response's metadata", {
+  respond <- grpc_response(
+    body = raw(),
+    headers = c("content-type" = "application/grpc", "x-h" = "1"),
+    trailers = c("grpc-status" = "5", "x-t" = "2", "x-t-bin" = "AQI")
+  )
+  m <- mock_channel(respond)
+  cnd <- expect_error(
+    grpc_call(m$channel, "/a.B/C", raw()),
+    class = "zugrpc_error_not_found"
+  )
+  expect_identical(cnd$headers, list("x-h" = "1"))
+  expect_identical(cnd$trailers, list("x-t" = "2", "x-t-bin" = as.raw(1:2)))
+
+  m <- mock_channel(respond)
+  st <- grpc_stream(m$channel, "/a.B/C", raw())
+  cnd <- expect_error(st$next_message(), class = "zugrpc_error_not_found")
+  expect_identical(cnd$headers, list("x-h" = "1"))
+  expect_identical(cnd$trailers, list("x-t" = "2", "x-t-bin" = as.raw(1:2)))
+
+  m <- mock_channel(grpc_response(
+    body = raw(),
+    headers = c("content-type" = "text/plain", "x-h" = "1"),
+    trailers = NULL,
+    status = 503L
+  ))
+  cnd <- expect_error(
+    grpc_call(m$channel, "/a.B/C", raw()),
+    class = "zugrpc_error_unavailable"
+  )
+  expect_identical(cnd$headers, list("x-h" = "1"))
+})
+
+test_that("a caller's user-agent goes before zugrpc's", {
+  m <- mock_channel(grpc_response(), headers = c("user-agent" = "chan/1"))
+  grpc_call(m$channel, "/a.B/C", raw())
+  grpc_call(m$channel, "/a.B/C", raw(), metadata = c("User-Agent" = "me/2"))
+  ua <- vapply(
+    m$seen$requests,
+    function(req) sent_header(req, "user-agent"),
+    character(1)
+  )
+  expect_match(ua[1], "^chan/1 zugrpc/[0-9.]+ zuhttp/")
+  expect_match(ua[2], "^me/2 zugrpc/[0-9.]+ zuhttp/")
+})
+
+test_that("a header grpc-status counts only when there is no body", {
+  # Trailers-Only means headers and no body; with a body, the trailers
+  # decide (§6.2).
+  m <- mock_channel(grpc_response(
+    body = wire_message(as.raw(1)),
+    headers = c("content-type" = "application/grpc", "grpc-status" = "5"),
+    trailers = c("grpc-status" = "0")
+  ))
+  expect_identical(grpc_call(m$channel, "/a.B/C", raw())$message, as.raw(1))
+})
+
+test_that("content-type is matched case-insensitively, and must be there", {
+  m <- mock_channel(grpc_response(
+    headers = c("content-type" = "Application/GRPC+proto")
+  ))
+  expect_identical(grpc_call(m$channel, "/a.B/C", raw())$status, "OK")
+
+  m <- mock_channel(grpc_response(headers = c("x-h" = "1")))
+  cnd <- expect_error(
+    grpc_call(m$channel, "/a.B/C", raw()),
+    class = "zugrpc_error_protocol"
+  )
+  expect_null(cnd$content_type)
 })

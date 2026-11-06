@@ -22,6 +22,12 @@ for f in $FILES; do
     "https://raw.githubusercontent.com/googleapis/googleapis/$GOOGLEAPIS_COMMIT/$f"
 done
 
+# design §12 records the protoc that built the committed file.
+want="libprotoc 36.2"
+if [ "$(protoc --version)" != "$want" ]; then
+  echo "warning: $(protoc --version) is not $want; the output may differ" >&2
+fi
+
 mkdir -p "$(dirname "$OUT")"
 # No --include_imports: the imports are well-known types, which every
 # zuproto pool already holds.

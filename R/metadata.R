@@ -18,9 +18,7 @@ metadata_encode <- function(metadata) {
       sprintf("Invalid metadata name '%s'.", nms[bad][1L])
     )
   }
-  reserved <- startsWith(nms, ":") |
-    startsWith(nms, "grpc-") |
-    nms %in% c("te", "content-type")
+  reserved <- is_reserved_name(nms)
   if (any(reserved)) {
     zugrpc_abort(
       "argument",
@@ -33,6 +31,25 @@ metadata_encode <- function(metadata) {
     character(1)
   )
   stats::setNames(values, nms)
+}
+
+# Names that belong to the protocol, not to metadata (§6.2, §6.4): HTTP/2
+# pseudo-headers, the grpc- prefix, te and content-type, and the
+# connection-specific headers HTTP/2 forbids (RFC 9113 §8.2.2), with host,
+# which :authority replaces. The same rule filters received metadata.
+reserved_names <- c(
+  "te",
+  "content-type",
+  "connection",
+  "keep-alive",
+  "proxy-connection",
+  "transfer-encoding",
+  "upgrade",
+  "host"
+)
+
+is_reserved_name <- function(nms) {
+  startsWith(nms, ":") | startsWith(nms, "grpc-") | nms %in% reserved_names
 }
 
 metadata_value <- function(name, value) {
@@ -48,12 +65,15 @@ metadata_value <- function(name, value) {
   ok <- is.character(value) &&
     length(value) == 1L &&
     !is.na(value) &&
-    grepl("^[ -~]*$", value)
+    grepl("^[ -~]*$", value, useBytes = TRUE)
   if (!ok) {
     zugrpc_abort(
       "argument",
       sprintf(
-        "Metadata '%s' must be one string of printable ASCII; use a -bin name for bytes.",
+        paste0(
+          "Metadata '%s' must be one string of printable ASCII; ",
+          "use a -bin name for bytes."
+        ),
         name
       )
     )
@@ -62,12 +82,32 @@ metadata_value <- function(name, value) {
 }
 
 # Received metadata, as a named character vector from the wire, into a named
-# list: `-bin` values become raw vectors, others stay strings.
+# list: `-bin` values become raw vectors, others stay strings. A `-bin` value
+# may join several with commas; each becomes an entry of the same name, as a
+# repeated header does. One that is not base64 is dropped with a warning:
+# metadata never decides the outcome of a call (§9).
 metadata_decode <- function(headers) {
-  out <- as.list(headers)
-  bin <- endsWith(names(headers), "-bin")
-  out[bin] <- lapply(headers[bin], base64_decode)
-  out
+  nms <- names(headers)
+  bin <- endsWith(nms, "-bin")
+  if (!any(bin)) {
+    return(as.list(headers))
+  }
+  out <- lapply(seq_along(headers), function(i) {
+    if (bin[i]) bin_values(nms[i], headers[[i]]) else list(headers[[i]])
+  })
+  times <- lengths(out)
+  stats::setNames(unlist(out, recursive = FALSE), rep(nms, times))
+}
+
+bin_values <- function(name, value) {
+  pieces <- if (nzchar(value)) strsplit(value, ",", fixed = TRUE)[[1L]] else ""
+  tryCatch(
+    lapply(trimws(pieces), base64_decode),
+    zugrpc_error_protocol = function(e) {
+      metadata_warning(name, value)
+      list()
+    }
+  )
 }
 
 # Channel headers go on every call; call metadata replaces a channel header
@@ -127,6 +167,5 @@ base64_decode <- function(s) {
     bitwAnd(w, 255L)
   )
   out <- as.raw(as.vector(bytes))
-  drop <- pad
-  out[seq_len(length(out) - drop)]
+  out[seq_len(length(out) - pad)]
 }

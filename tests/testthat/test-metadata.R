@@ -56,7 +56,11 @@ test_that("metadata_encode() accepts a named character vector", {
 test_that("metadata_encode() refuses reserved and grpc- names", {
   for (nm in c("grpc-foo", "grpc-timeout", "te", "content-type", ":path")) {
     md <- stats::setNames(list("x"), nm)
-    expect_error(metadata_encode(md), class = "zugrpc_error_argument")
+    expect_error(
+      metadata_encode(md),
+      class = "zugrpc_error_argument",
+      info = nm
+    )
   }
 })
 
@@ -93,6 +97,29 @@ test_that("metadata_decode() turns -bin values back into raw vectors", {
 
   padded <- metadata_decode(c("trace-bin" = "AQI="))
   expect_identical(padded, list("trace-bin" = as.raw(1:2)))
+})
+
+test_that("metadata_decode() splits a comma-joined -bin value", {
+  # A server may join repeated binary values with commas, as grpc-go reads.
+  md <- metadata_decode(c("x-bin" = "AQ,Ag", "y" = "a,b"))
+  expect_identical(
+    md,
+    list("x-bin" = as.raw(1), "x-bin" = as.raw(2), "y" = "a,b")
+  )
+})
+
+test_that("metadata_decode() drops a -bin value that is not base64", {
+  expect_warning(
+    md <- metadata_decode(c("x-bin" = "!!!", "y" = "ok")),
+    class = "zugrpc_warning_metadata"
+  )
+  expect_identical(md, list("y" = "ok"))
+  cnd <- expect_warning(
+    metadata_decode(c("x-bin" = "!!!")),
+    class = "zugrpc_warning"
+  )
+  expect_identical(cnd$name, "x-bin")
+  expect_identical(cnd$value, "!!!")
 })
 
 test_that("metadata_merge() lets call metadata override channel headers", {
@@ -134,4 +161,49 @@ test_that("check_method() wants /service/method", {
     expect_error(check_method(m), class = "zugrpc_error_argument")
   }
   expect_error(check_method(c("/a/b", "/c/d")), class = "zugrpc_error_argument")
+})
+
+test_that("metadata_encode() refuses HTTP/2 connection-specific headers", {
+  # RFC 9113 §8.2.2 makes these malformed on HTTP/2; host is :authority.
+  for (name in c(
+    "connection",
+    "keep-alive",
+    "proxy-connection",
+    "transfer-encoding",
+    "upgrade",
+    "host",
+    "Host"
+  )) {
+    expect_error(
+      metadata_encode(stats::setNames(list("x"), name)),
+      class = "zugrpc_error_argument",
+      info = name
+    )
+  }
+})
+
+test_that("the reserved names are the same going out and coming in", {
+  nms <- c(":path", "grpc-status", "te", "content-type", "connection", "x")
+  expect_identical(is_reserved_name(nms), c(rep(TRUE, 5), FALSE))
+  fields <- stats::setNames(as.character(seq_along(nms)), nms)
+  expect_named(user_metadata(fields), "x")
+})
+
+test_that("a non-ASCII metadata value is an argument error and nothing else", {
+  bad <- list(x = "café", y = rawToChar(as.raw(c(0x61, 0xff))))
+  for (name in names(bad)) {
+    expect_no_warning(
+      expect_error(
+        metadata_encode(bad[name]),
+        class = "zugrpc_error_argument"
+      )
+    )
+  }
+})
+
+test_that("check_method() takes only gRPC name characters", {
+  for (m in c("/a.B/C#x", "/a.B/C?x=1", "/a B/C", "/a.B/C%2F", "/1a/C")) {
+    expect_error(check_method(m), class = "zugrpc_error_argument", info = m)
+  }
+  expect_identical(check_method("/a_b.C_1/D_2"), "/a_b.C_1/D_2")
 })

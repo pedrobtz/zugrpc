@@ -15,7 +15,9 @@ grpc_call(channel, method, request, metadata = NULL, deadline = NULL)
 
 \item{metadata}{Request metadata: a named character vector, or a named
 list whose \code{-bin} entries are raw vectors. Names are lower-cased. Names
-starting with \verb{grpc-}, \code{te} and \code{content-type} are reserved.}
+starting with \verb{grpc-} or \code{:} are reserved, and so are \code{te},
+\code{content-type}, \code{host} and the connection headers HTTP/2 forbids, such
+as \code{connection}. A \code{user-agent} is sent before zugrpc's own.}
 
 \item{deadline}{Seconds from now, or an absolute \code{POSIXct}, by which the
 call must finish. It is sent to the server as \code{grpc-timeout} and also
@@ -24,7 +26,9 @@ bounds the request locally. \code{NULL} sets no deadline.}
 \value{
 A list with elements \code{message} (raw, the response message),
 \code{headers} and \code{trailers} (named lists of the initial and trailing
-metadata, with \code{-bin} values as raw vectors) and \code{status} (\code{"OK"}).
+metadata, with \code{-bin} values as raw vectors) and \code{status} (\code{"OK"}). A
+\code{-bin} value holding several, joined by commas, gives one entry each. One
+that is not base64 is dropped with a \code{zugrpc_warning_metadata} warning.
 }
 \description{
 Sends one request message to a method and returns the one response
@@ -43,8 +47,9 @@ the status as \verb{zugrpc_error_<name>}, for example
 \code{grpc-status-details-bin} trailer, or \code{NULL} when there is none: a list of
 \code{code}, \code{message} and \code{details}. Its \code{details} are the decoded error
 details, named by type, such as \code{ErrorInfo} with its \code{reason}, \code{domain}
-and \code{metadata}. A trailer that does not decode gives a
-\code{zugrpc_warning_details} warning, and \code{details} is \code{NULL}.
+and \code{metadata}. Two details of one type share its name, so
+\code{d[names(d) == "BadRequest"]} selects them all. A trailer that does not
+decode gives a \code{zugrpc_warning_details} warning, and \code{details} is \code{NULL}.
 
 A failure below gRPC, such as a refused connection or a TLS error,
 raises \code{zugrpc_error_transport}, which is also \code{zugrpc_error_unavailable}.

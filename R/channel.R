@@ -13,8 +13,9 @@
 #' @param url The server, as `http://host:port` or `https://host:port`. No
 #'   path, query or user information.
 #' @param headers Metadata sent on every call: a named character vector or a
-#'   named list, as `metadata` in [grpc_call()]. A call's own metadata
-#'   replaces a channel header of the same name.
+#'   named list, as `metadata` in [grpc_call()], with the same reserved
+#'   names. A call's own metadata replaces a channel header of the same
+#'   name.
 #' @param tls Certificate trust settings from [zuhttp::zu_tls()], for an
 #'   `https://` URL.
 #' @param keepalive HTTP/2 keepalive from [grpc_keepalive()], or `NULL` for
@@ -41,6 +42,7 @@ grpc_channel <- function(
   headers = NULL,
   tls = NULL,
   keepalive = grpc_keepalive(),
+  # The same 128 MiB as default_max_message, written out for the usage.
   max_message = 128 * 1024^2,
   client = NULL
 ) {
@@ -81,7 +83,7 @@ grpc_channel <- function(
   } else {
     do.call(zuhttp::zu_client_update, c(list(client), settings))
   }
-  client <- with_keepalive(client, keepalive)
+  client <- own_pool(with_keepalive(client, keepalive))
 
   ch <- new.env(parent = emptyenv())
   ch$origin <- target$origin
@@ -90,7 +92,9 @@ grpc_channel <- function(
   ch$headers <- metadata_encode(headers)
   ch$max_message <- max_message
   ch$client <- client
-  # Streams bound max_message per message, not the whole body (§6.3).
+  # Streams bound max_message per message, not the whole body (§6.3). The
+  # update keeps the pool, so both clients share the channel's connections
+  # and grpc_close() releases them all.
   ch$stream_client <- zuhttp::zu_client_update(client, max_body = Inf)
   ch$streams <- new.env(parent = emptyenv())
   ch$next_id <- 0
@@ -118,7 +122,7 @@ grpc_close <- function(channel) {
   if (!channel$closed) {
     channel$closed <- TRUE
     for (id in ls(channel$streams)) {
-      try(zuhttp::zu_resp_abort(channel$streams[[id]]), silent = TRUE)
+      abort_response(channel$streams[[id]])
     }
     rm(list = ls(channel$streams), envir = channel$streams)
     zuhttp::zu_pool_reset(channel$client)
@@ -137,6 +141,73 @@ print.zugrpc_channel <- function(x, ...) {
   invisible(x)
 }
 
+#' HTTP/2 keepalive settings
+#'
+#' A channel's connection can sit idle between calls, and a server or a
+#' middlebox may drop it without saying so. With keepalive, a connection
+#' idle for `time` seconds is sent an HTTP/2 PING before its next call, and
+#' replaced by a new one if no answer comes within `timeout` seconds.
+#'
+#' @param time Seconds of idleness before a PING.
+#' @param timeout Seconds to wait for the answer.
+#'
+#' @return A `zugrpc_keepalive`, for [grpc_channel()].
+#' @export
+#' @examples
+#' grpc_keepalive()
+#' grpc_keepalive(time = 30, timeout = 10)
+grpc_keepalive <- function(time = 60, timeout = 20) {
+  check_positive_seconds(time, "time")
+  check_positive_seconds(timeout, "timeout")
+  structure(
+    list(time = as.numeric(time), timeout = as.numeric(timeout)),
+    class = "zugrpc_keepalive"
+  )
+}
+
+#' @export
+print.zugrpc_keepalive <- function(x, ...) {
+  cat(sprintf(
+    "<zugrpc_keepalive> PING after %gs idle, answer within %gs\n",
+    x$time,
+    x$timeout
+  ))
+  invisible(x)
+}
+
+# A channel's connections are its own, so grpc_close() cannot clear those of
+# the caller's client or of another channel built on it (§6.1, D8). zuhttp
+# gives a client a fresh pool whenever its pool setting changes, and the
+# setting is changed twice to get one when it would stay the same.
+own_pool <- function(client) {
+  pool <- client$pool
+  if (is.null(pool)) {
+    return(client)
+  }
+  client <- zuhttp::zu_client_update(client, pool = NULL)
+  zuhttp::zu_client_update(client, pool = pool)
+}
+
+# Keepalive is a setting of zuhttp's pool (its §65.6). The client's other
+# pool settings are kept; a client with no pool has no idle connection to
+# keep alive.
+with_keepalive <- function(client, keepalive) {
+  pool <- client$pool
+  if (is.null(pool)) {
+    return(client)
+  }
+  zuhttp::zu_client_update(
+    client,
+    pool = zuhttp::zu_pool(
+      max_idle = pool$max_idle,
+      max_per_host = pool$max_per_host,
+      idle_timeout = pool$idle_timeout_ms / 1000,
+      keepalive_time = keepalive$time,
+      keepalive_timeout = keepalive$timeout
+    )
+  )
+}
+
 parse_target <- function(url) {
   ok <- is.character(url) && length(url) == 1L && !is.na(url)
   m <- if (ok) {
@@ -150,7 +221,7 @@ parse_target <- function(url) {
   if (length(m) != 3L) {
     zugrpc_abort(
       "argument",
-      "A channel URL must be one string of the form http://host:port or https://host:port."
+      "`url` must be one string, http://host:port or https://host:port."
     )
   }
   scheme <- tolower(m[2L])
@@ -184,63 +255,12 @@ user_agent <- function() {
   rpc_env$user_agent
 }
 
-#' HTTP/2 keepalive settings
-#'
-#' A channel's connection can sit idle between calls, and a server or a
-#' middlebox may drop it without saying so. With keepalive, a connection
-#' idle for `time` seconds is sent an HTTP/2 PING before its next call, and
-#' replaced by a new one if no answer comes within `timeout` seconds.
-#'
-#' @param time Seconds of idleness before a PING.
-#' @param timeout Seconds to wait for the answer.
-#'
-#' @return A `zugrpc_keepalive`, for [grpc_channel()].
-#' @export
-#' @examples
-#' grpc_keepalive()
-#' grpc_keepalive(time = 30, timeout = 10)
-grpc_keepalive <- function(time = 60, timeout = 20) {
-  for (arg in list(list("time", time), list("timeout", timeout))) {
-    v <- arg[[2L]]
-    if (!is.numeric(v) || length(v) != 1L || !is.finite(v) || v <= 0) {
-      zugrpc_abort(
-        "argument",
-        sprintf("`%s` must be one positive number of seconds.", arg[[1L]])
-      )
-    }
-  }
-  structure(
-    list(time = as.numeric(time), timeout = as.numeric(timeout)),
-    class = "zugrpc_keepalive"
-  )
-}
-
-#' @export
-print.zugrpc_keepalive <- function(x, ...) {
-  cat(sprintf(
-    "<zugrpc_keepalive> PING after %gs idle, answer within %gs\n",
-    x$time,
-    x$timeout
-  ))
-  invisible(x)
-}
-
-# Keepalive is a setting of zuhttp's pool (its §65.6). The client's other
-# pool settings are kept; a client with no pool has no idle connection to
-# keep alive.
-with_keepalive <- function(client, keepalive) {
-  pool <- client$pool
-  if (is.null(pool)) {
-    return(client)
-  }
-  zuhttp::zu_client_update(
-    client,
-    pool = zuhttp::zu_pool(
-      max_idle = pool$max_idle,
-      max_per_host = pool$max_per_host,
-      idle_timeout = pool$idle_timeout_ms / 1000,
-      keepalive_time = keepalive$time,
-      keepalive_timeout = keepalive$timeout
+check_positive_seconds <- function(x, arg) {
+  if (!is.numeric(x) || length(x) != 1L || !is.finite(x) || x <= 0) {
+    zugrpc_abort(
+      "argument",
+      sprintf("`%s` must be one positive number of seconds.", arg)
     )
-  )
+  }
+  invisible(x)
 }

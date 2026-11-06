@@ -1,4 +1,4 @@
-# Records the unary responses that the tests replay.
+# Records the unary and server-streaming responses that the tests replay.
 #
 # Run from the package root against grpc-go's interop server, built from the
 # pinned tag, and the status-details server in tools/test-server, which
@@ -10,9 +10,12 @@
 #   Rscript tools/record-fixtures.R localhost:50051 localhost:50052
 #
 # Each fixture is one `dput()` text file in tests/testthat/fixtures/unary/
-# (interop server) or tests/testthat/fixtures/details/ (status server):
+# or tests/testthat/fixtures/stream/ (interop server), or
+# tests/testthat/fixtures/details/ (status server):
 # the request zugrpc should send (method and framed body) and the response
 # exactly as zuhttp received it (HTTP status, headers, body and trailers).
+# Streams are gzipped (`.dput.gz`), since their payloads are mostly zero
+# bytes; R's file() reads them back unchanged.
 # The requests are built by hand here, not by zugrpc, so the fixtures check
 # zugrpc's encoding rather than repeat it.
 
@@ -56,6 +59,21 @@ simple_request <- function(size = 0, code = NULL, message = NULL) {
   out
 }
 
+# grpc.testing.StreamingOutputCallRequest: response_parameters = 2
+# (ResponseParameters: size = 1), response_status = 7.
+streaming_request <- function(sizes, code = NULL, message = NULL) {
+  params <- lapply(sizes, function(n) field_bytes(2, field_varint(1, n)))
+  out <- do.call(c, c(list(raw()), params))
+  if (!is.null(code)) {
+    status <- c(
+      field_varint(1, code),
+      field_bytes(2, charToRaw(enc2utf8(message)))
+    )
+    out <- c(out, field_bytes(7, status))
+  }
+  out
+}
+
 frame <- function(bytes) {
   n <- length(bytes)
   c(
@@ -74,6 +92,7 @@ record <- function(
   dir = "unary",
   server = "grpc-go v1.67.1 interop server"
 ) {
+  gz <- dir == "stream"
   out <- file.path(fixtures, dir)
   dir.create(out, recursive = TRUE, showWarnings = FALSE)
   body <- frame(message)
@@ -93,8 +112,12 @@ record <- function(
       trailers = zu_resp_trailers(res)
     )
   )
-  path <- file.path(out, paste0(name, ".dput"))
-  con <- file(path, "w", encoding = "UTF-8")
+  path <- file.path(out, paste0(name, if (gz) ".dput.gz" else ".dput"))
+  con <- if (gz) {
+    gzfile(path, "w", encoding = "UTF-8")
+  } else {
+    file(path, "w", encoding = "UTF-8")
+  }
   writeLines(
     c(
       sprintf("# Recorded from %s: %s", server, method),
@@ -139,6 +162,43 @@ record("unimplemented-method", paste0(svc, "UnimplementedCall"))
 record(
   "unimplemented-service",
   "/grpc.testing.UnimplementedService/UnimplementedCall"
+)
+
+# Server streaming. The body is recorded whole; the tests replay it through
+# zuhttp's pulled reads. The sizes are those of grpc's server_streaming
+# interop case, then one message larger than a 64 KiB read.
+record(
+  "sizes",
+  paste0(svc, "StreamingOutputCall"),
+  streaming_request(c(31415, 9, 2653, 58979)),
+  dir = "stream"
+)
+record(
+  "large",
+  paste0(svc, "StreamingOutputCall"),
+  streaming_request(c(70000, 1)),
+  dir = "stream"
+)
+record(
+  "empty",
+  paste0(svc, "StreamingOutputCall"),
+  streaming_request(integer()),
+  dir = "stream"
+)
+# The interop server honours response_status on FullDuplexCall only.
+record(
+  "status-09",
+  paste0(svc, "FullDuplexCall"),
+  streaming_request(c(5, 5), code = 9, message = "stream end"),
+  dir = "stream"
+)
+
+record(
+  "fail",
+  "/zugrpc.test.Status/StreamFail",
+  authority = details,
+  dir = "stream",
+  server = "tools/test-server (grpc-go v1.67.1)"
 )
 
 for (name in c("Spark", "Every")) {

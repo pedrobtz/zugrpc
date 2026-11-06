@@ -13,14 +13,18 @@
 #' @param request The encoded request message, a raw vector.
 #' @param metadata Request metadata: a named character vector, or a named
 #'   list whose `-bin` entries are raw vectors. Names are lower-cased. Names
-#'   starting with `grpc-`, `te` and `content-type` are reserved.
+#'   starting with `grpc-` or `:` are reserved, and so are `te`,
+#'   `content-type`, `host` and the connection headers HTTP/2 forbids, such
+#'   as `connection`. A `user-agent` is sent before zugrpc's own.
 #' @param deadline Seconds from now, or an absolute `POSIXct`, by which the
 #'   call must finish. It is sent to the server as `grpc-timeout` and also
 #'   bounds the request locally. `NULL` sets no deadline.
 #'
 #' @return A list with elements `message` (raw, the response message),
 #'   `headers` and `trailers` (named lists of the initial and trailing
-#'   metadata, with `-bin` values as raw vectors) and `status` (`"OK"`).
+#'   metadata, with `-bin` values as raw vectors) and `status` (`"OK"`). A
+#'   `-bin` value holding several, joined by commas, gives one entry each. One
+#'   that is not base64 is dropped with a `zugrpc_warning_metadata` warning.
 #'
 #' @section Errors:
 #' A non-`OK` status raises `zugrpc_error_status`, whose class also carries
@@ -31,8 +35,9 @@
 #' `grpc-status-details-bin` trailer, or `NULL` when there is none: a list of
 #' `code`, `message` and `details`. Its `details` are the decoded error
 #' details, named by type, such as `ErrorInfo` with its `reason`, `domain`
-#' and `metadata`. A trailer that does not decode gives a
-#' `zugrpc_warning_details` warning, and `details` is `NULL`.
+#' and `metadata`. Two details of one type share its name, so
+#' `d[names(d) == "BadRequest"]` selects them all. A trailer that does not
+#' decode gives a `zugrpc_warning_details` warning, and `details` is `NULL`.
 #'
 #' A failure below gRPC, such as a refused connection or a TLS error,
 #' raises `zugrpc_error_transport`, which is also `zugrpc_error_unavailable`.
@@ -94,17 +99,25 @@ build_request <- function(channel, method, request, metadata, deadline) {
     status_abort("DEADLINE_EXCEEDED", "deadline exceeded", method = method)
   }
   timeout <- if (!is.null(seconds)) grpc_timeout(seconds)
+  metadata <- metadata_merge(channel$headers, metadata_encode(metadata))
+  # A caller's user-agent goes before zugrpc's, as other gRPC clients do.
+  agent <- user_agent()
+  if ("user-agent" %in% names(metadata)) {
+    agent <- paste(metadata[["user-agent"]], agent)
+    metadata <- metadata[names(metadata) != "user-agent"]
+  }
   headers <- request_headers(
-    metadata = metadata_merge(channel$headers, metadata_encode(metadata)),
+    metadata = metadata,
     timeout = timeout,
-    user_agent = user_agent()
+    user_agent = agent
   )
   req <- zuhttp::zu_request("POST", paste0(channel$origin, method))
   req <- do.call(zuhttp::zu_headers, c(list(req), as.list(headers)))
   req <- zuhttp::zu_body_raw(req, body, type = "application/grpc+proto")
-  if (!is.null(seconds)) {
-    req <- zuhttp::zu_req_timeout(req, total = seconds)
-  }
+  # Without a deadline the request must not keep zuhttp's default timeout,
+  # and zuhttp reads a bound that rounds to 0 ms as "its default" too.
+  local_bound <- if (is.null(seconds)) Inf else max(seconds, 0.001)
+  req <- zuhttp::zu_req_timeout(req, total = local_bound)
   list(
     request = req,
     deadline_at = if (!is.null(seconds)) Sys.time() + seconds
@@ -123,47 +136,50 @@ unary_result <- function(
   method,
   max_message
 ) {
+  with_call_context(
+    unary_outcome(http_status, headers, body, trailers, method, max_message),
+    method = method,
+    http_status = http_status
+  )
+}
+
+unary_outcome <- function(
+  http_status,
+  headers,
+  body,
+  trailers,
+  method,
+  max_message
+) {
   headers <- lower_names(headers)
   trailers <- lower_names(trailers)
+  # Decoded once, so that a bad -bin value warns once.
+  user_headers <- metadata_decode(user_metadata(headers))
+  user_trailers <- metadata_decode(user_metadata(trailers))
   # Trailers-Only: the status arrives in the one HEADERS block.
   status_fields <- trailers
   if (is.null(field(trailers, "grpc-status")) && length(body) == 0L) {
     status_fields <- headers
   }
   status_value <- field(status_fields, "grpc-status")
-  message_value <- field(status_fields, "grpc-message")
 
   if (is.null(status_value)) {
     if (http_status != 200L) {
-      status_abort(
-        status_from_http(http_status),
-        sprintf("HTTP status %d with no grpc-status", http_status),
-        http_status = http_status,
-        method = method,
-        headers = metadata_decode(user_metadata(headers)),
-        trailers = metadata_decode(user_metadata(trailers))
-      )
+      stop(http_status_error(http_status, method, user_headers, user_trailers))
     }
     check_content_type(headers, body)
   }
 
   status <- status_from_header(status_value)
   if (status$name != "OK") {
-    msg <- grpc_message_decode(message_value)
-    if (!nzchar(msg)) {
-      msg <- status$message
-    }
-    status_abort(
-      status$name,
-      msg,
-      details = status_details_decode(
-        field(status_fields, "grpc-status-details-bin")
-      ),
-      http_status = http_status,
-      method = method,
-      headers = metadata_decode(user_metadata(headers)),
-      trailers = metadata_decode(user_metadata(trailers))
-    )
+    stop(grpc_status_error(
+      status,
+      status_fields,
+      http_status,
+      method,
+      user_headers,
+      user_trailers
+    ))
   }
   check_content_type(headers, body)
 
@@ -192,9 +208,48 @@ unary_result <- function(
 
   list(
     message = framed$messages[[1L]],
-    headers = metadata_decode(user_metadata(headers)),
-    trailers = metadata_decode(user_metadata(trailers)),
+    headers = user_headers,
+    trailers = user_trailers,
     status = "OK"
+  )
+}
+
+# The condition for a non-OK status, from the fields that carried it: the
+# trailers, or the headers of a Trailers-Only response (§6.2, §6.5). An
+# empty grpc-message falls back to what status_from_header() found, such as
+# a missing grpc-status.
+grpc_status_error <- function(
+  status,
+  fields,
+  http_status,
+  method,
+  headers,
+  trailers
+) {
+  message <- grpc_message_decode(field(fields, "grpc-message"))
+  if (!nzchar(message)) {
+    message <- status$message
+  }
+  status_error(
+    status$name,
+    message,
+    details = status_details_decode(field(fields, "grpc-status-details-bin")),
+    http_status = http_status,
+    method = method,
+    headers = headers,
+    trailers = trailers
+  )
+}
+
+# The condition for a non-200 response with no grpc-status (§6.2).
+http_status_error <- function(http_status, method, headers, trailers) {
+  status_error(
+    status_from_http(http_status),
+    sprintf("HTTP status %d with no grpc-status", http_status),
+    http_status = http_status,
+    method = method,
+    headers = headers,
+    trailers = trailers
   )
 }
 
@@ -213,7 +268,7 @@ check_content_type <- function(headers, body) {
       body = body[seq_len(min(length(body), 1024L))]
     )
   }
-  invisible()
+  invisible(headers)
 }
 
 # The first value of a header, or NULL when it is absent.
@@ -235,9 +290,5 @@ lower_names <- function(fields) {
 # Metadata as the caller sees it: the reserved fields of the protocol are
 # not metadata (§6.2, §6.4).
 user_metadata <- function(fields) {
-  nms <- names(fields)
-  keep <- !(startsWith(nms, ":") |
-    startsWith(nms, "grpc-") |
-    nms %in% c("content-type", "te"))
-  fields[keep]
+  fields[!is_reserved_name(names(fields))]
 }

@@ -33,7 +33,10 @@ deadline_seconds <- function(deadline, now = Sys.time()) {
   if (!ok) {
     zugrpc_abort(
       "argument",
-      "A deadline must be a non-negative number of seconds or one POSIXct time."
+      paste0(
+        "`deadline` must be a non-negative number of seconds or one POSIXct ",
+        "time."
+      )
     )
   }
   as.numeric(deadline)

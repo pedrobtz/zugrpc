@@ -18,8 +18,9 @@ grpc_channel(
 path, query or user information.}
 
 \item{headers}{Metadata sent on every call: a named character vector or a
-named list, as \code{metadata} in \code{\link[=grpc_call]{grpc_call()}}. A call's own metadata
-replaces a channel header of the same name.}
+named list, as \code{metadata} in \code{\link[=grpc_call]{grpc_call()}}, with the same reserved
+names. A call's own metadata replaces a channel header of the same
+name.}
 
 \item{tls}{Certificate trust settings from \code{\link[zuhttp:zu_tls]{zuhttp::zu_tls()}}, for an
 \verb{https://} URL.}
