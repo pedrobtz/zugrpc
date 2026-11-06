@@ -32,7 +32,9 @@ grpc_call(channel, method, request, metadata = NULL, deadline = NULL)
 
   Request metadata: a named character vector, or a named list whose
   `-bin` entries are raw vectors. Names are lower-cased. Names starting
-  with `grpc-`, `te` and `content-type` are reserved.
+  with `grpc-` or `:` are reserved, and so are `te`, `content-type`,
+  `host` and the connection headers HTTP/2 forbids, such as
+  `connection`. A `user-agent` is sent before zugrpc's own.
 
 - deadline:
 
@@ -44,7 +46,9 @@ grpc_call(channel, method, request, metadata = NULL, deadline = NULL)
 
 A list with elements `message` (raw, the response message), `headers`
 and `trailers` (named lists of the initial and trailing metadata, with
-`-bin` values as raw vectors) and `status` (`"OK"`).
+`-bin` values as raw vectors) and `status` (`"OK"`). A `-bin` value
+holding several, joined by commas, gives one entry each. One that is not
+base64 is dropped with a `zugrpc_warning_metadata` warning.
 
 ## Errors
 
@@ -56,8 +60,10 @@ the status as `zugrpc_error_<name>`, for example
 `grpc-status-details-bin` trailer, or `NULL` when there is none: a list
 of `code`, `message` and `details`. Its `details` are the decoded error
 details, named by type, such as `ErrorInfo` with its `reason`, `domain`
-and `metadata`. A trailer that does not decode gives a
-`zugrpc_warning_details` warning, and `details` is `NULL`.
+and `metadata`. Two details of one type share its name, so
+`d[names(d) == "BadRequest"]` selects them all. A trailer that does not
+decode gives a `zugrpc_warning_details` warning, and `details` is
+`NULL`.
 
 A failure below gRPC, such as a refused connection or a TLS error,
 raises `zugrpc_error_transport`, which is also

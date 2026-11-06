@@ -39,23 +39,25 @@
 
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="0.0.0.9000" id="zugrpc-0009000">zugrpc 0.0.0.9000<a class="anchor" aria-label="anchor" href="#zugrpc-0009000"></a></h2>
-<ul><li>
-<code><a href="../reference/grpc_channel.html">grpc_channel()</a></code> opens a channel to a gRPC server over cleartext HTTP/2 (<code>http://</code>) or TLS (<code>https://</code>). It can build on a <code><a href="https://pedrobtz.github.io/zuhttp/reference/zu_client.html" class="external-link">zuhttp::zu_client()</a></code> you supply, so proxies, TLS settings and test transports carry over. <code><a href="../reference/grpc_close.html">grpc_close()</a></code> closes it.</li>
-<li>
-<code><a href="../reference/grpc_call.html">grpc_call()</a></code> makes a unary call. It returns the response message with its initial and trailing metadata, and raises <code>zugrpc_error_status</code>, with a class per status code, when the call fails. Responses that are not gRPC or break its framing raise <code>zugrpc_error_protocol</code>.</li>
-<li>A failed call’s condition carries <code>details</code>, the <code>google.rpc.Status</code> decoded from the <code>grpc-status-details-bin</code> trailer, with each error detail such as <code>ErrorInfo</code> unpacked. A trailer that does not decode is a <code>zugrpc_warning_details</code> warning, and the status is kept.</li>
-<li>
-<code><a href="../reference/grpc_stream.html">grpc_stream()</a></code> makes a server-streaming call. Its <code>$next_message()</code> returns one message at a time as it arrives, so the server sends only as fast as you read. <code>$cancel()</code> stops the call and keeps the connection. <code><a href="../reference/grpc_close.html">grpc_close()</a></code> cancels a channel’s open streams, and a stream that is no longer referenced is cancelled when it is garbage-collected.</li>
-<li>A call whose deadline has already passed fails with <code>DEADLINE_EXCEEDED</code> without being sent.</li>
-<li>
-<code><a href="../reference/grpc_keepalive.html">grpc_keepalive()</a></code> sets HTTP/2 keepalive for a channel. By default a connection idle for 60 seconds is checked with a PING before its next call, as Spark Connect’s Python client does.</li>
-<li>Each call no longer spends about a millisecond rebuilding the user-agent string.</li>
-<li>
-<code><a href="../reference/zugrpc_info.html">zugrpc_info()</a></code> reports the zuhttp version, whether it speaks HTTP/2, and its TLS backend.</li>
-<li>Failures below gRPC raise <code>zugrpc_error_transport</code>, which is also <code>zugrpc_error_unavailable</code>. A timeout is <code>DEADLINE_EXCEEDED</code>, and an interrupt raises <code>zugrpc_error_interrupt</code>.</li>
-<li>
-<code><a href="../reference/grpc_status_codes.html">grpc_status_codes()</a></code> lists the 17 gRPC status codes.</li>
-<li>The gRPC wire format, internal for now: message framing, metadata with <code>-bin</code> values in base64, the <code>grpc-timeout</code> header, <code>grpc-status</code> and <code>grpc-message</code> decoding, and the HTTP-status fallback.</li>
+<ul><li><p>A call or stream with no deadline no longer fails with <code>DEADLINE_EXCEEDED</code> after 30 seconds, zuhttp’s default timeout (<a href="https://github.com/pedrobtz/zugrpc/issues/23" class="external-link">#23</a>).</p></li>
+<li><p>A server’s malformed <code>grpc-message</code> or <code>-bin</code> metadata no longer hides the call’s status. A <code>-bin</code> value that is not base64 is dropped with a <code>zugrpc_warning_metadata</code> warning, and comma-joined values are split (<a href="https://github.com/pedrobtz/zugrpc/issues/25" class="external-link">#25</a>, <a href="https://github.com/pedrobtz/zugrpc/issues/26" class="external-link">#26</a>).</p></li>
+<li><p><code><a href="../reference/grpc_close.html">grpc_close()</a></code> no longer closes the connections of the <code>zuhttp</code> client a channel was built on, or of other channels built on it (<a href="https://github.com/pedrobtz/zugrpc/issues/27" class="external-link">#27</a>).</p></li>
+<li><p>Every condition of a call carries <code>method</code>, and <code>http_status</code> once there is a response (<a href="https://github.com/pedrobtz/zugrpc/issues/28" class="external-link">#28</a>).</p></li>
+<li><p>A stream that failed raises the same condition on every later <code>$next_message()</code>, instead of reading as a clean end (<a href="https://github.com/pedrobtz/zugrpc/issues/35" class="external-link">#35</a>).</p></li>
+<li><p>Metadata named <code>host</code>, or a connection header HTTP/2 forbids, is an argument error. A <code>user-agent</code> you set is sent before zugrpc’s own instead of being replaced (<a href="https://github.com/pedrobtz/zugrpc/issues/36" class="external-link">#36</a>).</p></li>
+<li><p>A method name must use protobuf name characters (<a href="https://github.com/pedrobtz/zugrpc/issues/50" class="external-link">#50</a>).</p></li>
+<li><p>Reading many small messages from a stream no longer slows down with the number in each read (<a href="https://github.com/pedrobtz/zugrpc/issues/34" class="external-link">#34</a>).</p></li>
+<li><p><code><a href="../reference/grpc_channel.html">grpc_channel()</a></code> opens a channel to a gRPC server over cleartext HTTP/2 (<code>http://</code>) or TLS (<code>https://</code>). It can build on a <code><a href="https://pedrobtz.github.io/zuhttp/reference/zu_client.html" class="external-link">zuhttp::zu_client()</a></code> you supply, so proxies, TLS settings and test transports carry over. <code><a href="../reference/grpc_close.html">grpc_close()</a></code> closes it.</p></li>
+<li><p><code><a href="../reference/grpc_call.html">grpc_call()</a></code> makes a unary call. It returns the response message with its initial and trailing metadata, and raises <code>zugrpc_error_status</code>, with a class per status code, when the call fails. Responses that are not gRPC or break its framing raise <code>zugrpc_error_protocol</code>.</p></li>
+<li><p>A failed call’s condition carries <code>details</code>, the <code>google.rpc.Status</code> decoded from the <code>grpc-status-details-bin</code> trailer, with each error detail such as <code>ErrorInfo</code> unpacked. A trailer that does not decode is a <code>zugrpc_warning_details</code> warning, and the status is kept.</p></li>
+<li><p><code><a href="../reference/grpc_stream.html">grpc_stream()</a></code> makes a server-streaming call. Its <code>$next_message()</code> returns one message at a time as it arrives, so the server sends only as fast as you read. <code>$cancel()</code> stops the call and keeps the connection. <code><a href="../reference/grpc_close.html">grpc_close()</a></code> cancels a channel’s open streams, and a stream that is no longer referenced is cancelled when it is garbage-collected.</p></li>
+<li><p>A call whose deadline has already passed fails with <code>DEADLINE_EXCEEDED</code> without being sent.</p></li>
+<li><p><code><a href="../reference/grpc_keepalive.html">grpc_keepalive()</a></code> sets HTTP/2 keepalive for a channel. By default a connection idle for 60 seconds is checked with a PING before its next call, as Spark Connect’s Python client does.</p></li>
+<li><p>Each call no longer spends about a millisecond rebuilding the user-agent string.</p></li>
+<li><p><code><a href="../reference/zugrpc_info.html">zugrpc_info()</a></code> reports the zuhttp version, whether it speaks HTTP/2, and its TLS backend.</p></li>
+<li><p>Failures below gRPC raise <code>zugrpc_error_transport</code>, which is also <code>zugrpc_error_unavailable</code>. A timeout is <code>DEADLINE_EXCEEDED</code>, and an interrupt raises <code>zugrpc_error_interrupt</code>.</p></li>
+<li><p><code><a href="../reference/grpc_status_codes.html">grpc_status_codes()</a></code> lists the 17 gRPC status codes.</p></li>
+<li><p>The gRPC wire format, internal for now: message framing, metadata with <code>-bin</code> values in base64, the <code>grpc-timeout</code> header, <code>grpc-status</code> and <code>grpc-message</code> decoding, and the HTTP-status fallback.</p></li>
 </ul></div>
   </main></div>
 

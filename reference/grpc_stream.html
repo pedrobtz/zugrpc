@@ -75,7 +75,9 @@ than filling memory.</p>
 <dt id="arg-metadata">metadata<a class="anchor" aria-label="anchor" href="#arg-metadata"></a></dt>
 <dd><p>Request metadata: a named character vector, or a named
 list whose <code>-bin</code> entries are raw vectors. Names are lower-cased. Names
-starting with <code>grpc-</code>, <code>te</code> and <code>content-type</code> are reserved.</p></dd>
+starting with <code>grpc-</code> or <code>:</code> are reserved, and so are <code>te</code>,
+<code>content-type</code>, <code>host</code> and the connection headers HTTP/2 forbids, such
+as <code>connection</code>. A <code>user-agent</code> is sent before zugrpc's own.</p></dd>
 
 
 <dt id="arg-deadline">deadline<a class="anchor" aria-label="anchor" href="#arg-deadline"></a></dt>
@@ -95,7 +97,9 @@ deadline that is already partly used. <code>NULL</code> sets no deadline.</p></d
     <p>The stream is an object with five methods:</p><ul><li><p><code>$headers()</code> returns the initial metadata, a named list.</p></li>
 <li><p><code>$next_message()</code> returns the next message as a raw vector, or <code>NULL</code>
 at the end of the stream. It raises a condition, as <code><a href="grpc_call.html">grpc_call()</a></code> does,
-when the call ends with a status other than <code>OK</code>.</p></li>
+when the call ends with a status other than <code>OK</code>. A stream that fails
+any other way, such as a lost connection, a passed deadline or a broken
+message, raises the same condition again on every later call.</p></li>
 <li><p><code>$trailers()</code> returns the trailing metadata once <code>$next_message()</code> has
 returned <code>NULL</code>, and <code>NULL</code> before.</p></li>
 <li><p><code>$status()</code> returns the final status name, such as <code>"OK"</code>, once the

@@ -78,7 +78,9 @@ condition instead of returning.</p>
 <dt id="arg-metadata">metadata<a class="anchor" aria-label="anchor" href="#arg-metadata"></a></dt>
 <dd><p>Request metadata: a named character vector, or a named
 list whose <code>-bin</code> entries are raw vectors. Names are lower-cased. Names
-starting with <code>grpc-</code>, <code>te</code> and <code>content-type</code> are reserved.</p></dd>
+starting with <code>grpc-</code> or <code>:</code> are reserved, and so are <code>te</code>,
+<code>content-type</code>, <code>host</code> and the connection headers HTTP/2 forbids, such
+as <code>connection</code>. A <code>user-agent</code> is sent before zugrpc's own.</p></dd>
 
 
 <dt id="arg-deadline">deadline<a class="anchor" aria-label="anchor" href="#arg-deadline"></a></dt>
@@ -91,7 +93,9 @@ bounds the request locally. <code>NULL</code> sets no deadline.</p></dd>
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>
     <p>A list with elements <code>message</code> (raw, the response message),
 <code>headers</code> and <code>trailers</code> (named lists of the initial and trailing
-metadata, with <code>-bin</code> values as raw vectors) and <code>status</code> (<code>"OK"</code>).</p>
+metadata, with <code>-bin</code> values as raw vectors) and <code>status</code> (<code>"OK"</code>). A
+<code>-bin</code> value holding several, joined by commas, gives one entry each. One
+that is not base64 is dropped with a <code>zugrpc_warning_metadata</code> warning.</p>
     </div>
     <div class="section level2">
     <h2 id="errors">Errors<a class="anchor" aria-label="anchor" href="#errors"></a></h2>
@@ -105,8 +109,9 @@ the status as <code>zugrpc_error_&lt;name&gt;</code>, for example
 <code>grpc-status-details-bin</code> trailer, or <code>NULL</code> when there is none: a list of
 <code>code</code>, <code>message</code> and <code>details</code>. Its <code>details</code> are the decoded error
 details, named by type, such as <code>ErrorInfo</code> with its <code>reason</code>, <code>domain</code>
-and <code>metadata</code>. A trailer that does not decode gives a
-<code>zugrpc_warning_details</code> warning, and <code>details</code> is <code>NULL</code>.</p>
+and <code>metadata</code>. Two details of one type share its name, so
+<code>d[names(d) == "BadRequest"]</code> selects them all. A trailer that does not
+decode gives a <code>zugrpc_warning_details</code> warning, and <code>details</code> is <code>NULL</code>.</p>
 <p>A failure below gRPC, such as a refused connection or a TLS error,
 raises <code>zugrpc_error_transport</code>, which is also <code>zugrpc_error_unavailable</code>.
 The <code>zuhttp</code> condition is its <code>parent</code>. A local timeout is

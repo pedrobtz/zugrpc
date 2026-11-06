@@ -30,7 +30,9 @@ grpc_stream(channel, method, request, metadata = NULL, deadline = NULL)
 
   Request metadata: a named character vector, or a named list whose
   `-bin` entries are raw vectors. Names are lower-cased. Names starting
-  with `grpc-`, `te` and `content-type` are reserved.
+  with `grpc-` or `:` are reserved, and so are `te`, `content-type`,
+  `host` and the connection headers HTTP/2 forbids, such as
+  `connection`. A `user-agent` is sent before zugrpc's own.
 
 - deadline:
 
@@ -53,7 +55,9 @@ The stream is an object with five methods:
 - `$next_message()` returns the next message as a raw vector, or `NULL`
   at the end of the stream. It raises a condition, as
   [`grpc_call()`](https://pedrobtz.github.io/zugrpc/reference/grpc_call.md)
-  does, when the call ends with a status other than `OK`.
+  does, when the call ends with a status other than `OK`. A stream that
+  fails any other way, such as a lost connection, a passed deadline or a
+  broken message, raises the same condition again on every later call.
 
 - `$trailers()` returns the trailing metadata once `$next_message()` has
   returned `NULL`, and `NULL` before.

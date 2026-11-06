@@ -31,8 +31,9 @@ grpc_channel(
 
   Metadata sent on every call: a named character vector or a named list,
   as `metadata` in
-  [`grpc_call()`](https://pedrobtz.github.io/zugrpc/reference/grpc_call.md).
-  A call's own metadata replaces a channel header of the same name.
+  [`grpc_call()`](https://pedrobtz.github.io/zugrpc/reference/grpc_call.md),
+  with the same reserved names. A call's own metadata replaces a channel
+  header of the same name.
 
 - tls:
 
