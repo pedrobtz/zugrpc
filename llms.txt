@@ -94,8 +94,8 @@ tryCatch(
 
 Every function starts with `grpc_`, except
 [`zugrpc_info()`](https://pedrobtz.github.io/zugrpc/reference/zugrpc_info.md),
-and the condition classes are `zugrpc_error_` followed by the status
-code in lower case.
+and a failed call’s condition class is `zugrpc_error_` followed by its
+status code in lower case.
 
 ## Learn more
 
