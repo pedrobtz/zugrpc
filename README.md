@@ -94,8 +94,8 @@ tryCatch(
 #> [1] "no such greeting"
 ```
 
-Every function starts with `grpc_`, except `zugrpc_info()`, and the
-condition classes are `zugrpc_error_` followed by the status code in
+Every function starts with `grpc_`, except `zugrpc_info()`, and a failed
+call’s condition class is `zugrpc_error_` followed by its status code in
 lower case.
 
 ## Learn more
