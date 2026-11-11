@@ -207,3 +207,15 @@ test_that("check_method() takes only gRPC name characters", {
   }
   expect_identical(check_method("/a_b.C_1/D_2"), "/a_b.C_1/D_2")
 })
+
+test_that("a comma-joined -bin value splits the same at either end", {
+  expect_identical(
+    unname(metadata_decode(c("v-bin" = "QQ,"))),
+    list(as.raw(0x41), raw())
+  )
+  expect_identical(
+    unname(metadata_decode(c("v-bin" = ",QQ"))),
+    list(raw(), as.raw(0x41))
+  )
+  expect_length(metadata_decode(c("v-bin" = "QQ,,Qg")), 3L)
+})

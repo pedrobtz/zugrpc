@@ -71,14 +71,32 @@ unpack_details <- function(details) {
     function(any) sub("^.*/", "", any$type_url),
     character(1)
   )
-  out <- lapply(seq_along(details), function(i) {
-    if (types[i] %in% error_detail_types) {
-      zuproto::proto_unpack_any(details[[i]], rpc_pool(), enums = "character")
-    } else {
-      details[[i]]
-    }
-  })
   known <- types %in% error_detail_types
+  out <- lapply(seq_along(details), function(i) {
+    if (!known[i]) {
+      return(details[[i]])
+    }
+    # One detail that does not decode is kept as it came, with a warning;
+    # the Status and its other details are not lost with it (#80).
+    tryCatch(
+      zuproto::proto_unpack_any(details[[i]], rpc_pool(), enums = "character"),
+      error = function(e) {
+        known[i] <<- FALSE
+        warning(zugrpc_warning(
+          "details",
+          paste0(
+            "A ",
+            types[i],
+            " detail in grpc-status-details-bin could not be decoded and ",
+            "is kept as it came. ",
+            conditionMessage(e)
+          ),
+          parent = e
+        ))
+        details[[i]]
+      }
+    )
+  })
   names(out) <- ifelse(known, sub("^google\\.rpc\\.", "", types), types)
   out
 }

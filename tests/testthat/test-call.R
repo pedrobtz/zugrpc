@@ -92,7 +92,7 @@ test_that("grpc-message is percent-decoded as UTF-8", {
   )
   expect_identical(
     cnd$grpc_message,
-    "\t\ntest with whitespace\r\nand Unicode BMP ☺ and non-BMP \U0001f608\t\n"
+    "\t\ntest with whitespace\r\nand Unicode BMP \u263a and non-BMP \U0001f608\t\n"
   )
 })
 
@@ -428,4 +428,63 @@ test_that("content-type is matched case-insensitively, and must be there", {
     class = "zugrpc_error_protocol"
   )
   expect_null(cnd$content_type)
+})
+
+test_that("past max_message, what the headers say still decides (#79)", {
+  page <- charToRaw(strrep("x", 300))
+  m <- mock_channel(
+    grpc_response(
+      body = page,
+      headers = c("content-type" = "text/html"),
+      trailers = NULL,
+      status = 503L
+    ),
+    max_message = 100
+  )
+  cnd <- expect_error(
+    grpc_call(m$channel, "/a.B/C", raw()),
+    class = "zugrpc_error_unavailable"
+  )
+  expect_identical(cnd$http_status, 503L)
+
+  m <- mock_channel(
+    grpc_response(
+      body = page,
+      headers = c("content-type" = "text/html"),
+      trailers = NULL
+    ),
+    max_message = 100
+  )
+  expect_error(
+    grpc_call(m$channel, "/a.B/C", raw()),
+    class = "zugrpc_error_protocol"
+  )
+
+  m <- mock_channel(
+    grpc_response(body = wire_message(raw(101))),
+    max_message = 100
+  )
+  cnd <- expect_error(
+    grpc_call(m$channel, "/a.B/C", raw()),
+    class = "zugrpc_error_resource_exhausted"
+  )
+  expect_identical(cnd$http_status, 200L)
+  expect_identical(cnd$method, "/a.B/C")
+})
+
+test_that("max_message is straddled on the unary path", {
+  for (n in 99:101) {
+    m <- mock_channel(
+      grpc_response(body = wire_message(raw(n))),
+      max_message = 100
+    )
+    if (n <= 100) {
+      expect_length(grpc_call(m$channel, "/a.B/C", raw())$message, n)
+    } else {
+      expect_error(
+        grpc_call(m$channel, "/a.B/C", raw()),
+        class = "zugrpc_error_resource_exhausted"
+      )
+    }
+  }
 })

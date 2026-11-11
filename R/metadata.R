@@ -100,7 +100,13 @@ metadata_decode <- function(headers) {
 }
 
 bin_values <- function(name, value) {
-  pieces <- if (nzchar(value)) strsplit(value, ",", fixed = TRUE)[[1L]] else ""
+  # strsplit() drops a trailing empty piece but keeps a leading one; the
+  # extra comma makes `"QQ,"` two values, as `",QQ"` is (#88).
+  pieces <- if (nzchar(value)) {
+    strsplit(paste0(value, ","), ",", fixed = TRUE)[[1L]]
+  } else {
+    ""
+  }
   tryCatch(
     lapply(trimws(pieces), base64_decode),
     zugrpc_error_protocol = function(e) {
