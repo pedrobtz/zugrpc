@@ -1,5 +1,39 @@
 # zugrpc 0.0.0.9000
 
+* Metadata named `r`, `re` or `req` is sent, instead of failing the call
+  with an error from zuhttp (#81).
+* A metadata name given more than once is sent once, its values joined by
+  commas, instead of failing at call time. Every `user-agent` given is
+  kept, and an empty one no longer adds a leading space (#82).
+* Requests no longer ask for HTTP content coding (`accept-encoding: gzip`),
+  and a response with one is not decoded. `content-length` and
+  `accept-encoding` are reserved names. A client passed to `grpc_channel()`
+  may not set a reserved header, and its `query` is dropped (#83).
+* `grpc_channel()` refuses a URL whose host or port cannot be used, with
+  `zugrpc_error_argument`, instead of every call failing as `UNAVAILABLE`
+  (#84).
+* `grpc_keepalive()` refuses values outside 1 ms to 2147483.647 s, which
+  zuhttp would refuse or clamp, and prints its values in full (#85).
+* A positive deadline below a femtosecond is sent as `1n`, not `0n` (#87).
+* A stream decides its status as a unary call does. A status in the headers
+  counts only when no body came, a status in the trailers wins over a body
+  that ends inside a message, and an `OK` status in the headers no longer
+  makes an HTML body acceptable. The not-gRPC error keeps the first 1 KiB
+  of the body (#58).
+* A stream returns the complete messages that arrived before a broken one,
+  then raises, however the server's bytes were split (#76).
+* A warning while a stream ends, such as from undecodable `-bin` trailers,
+  can no longer make a failed stream read as a clean end (#77).
+* A unary response larger than `max_message` is still `UNAVAILABLE` for a
+  503 and a protocol error for a body that is not gRPC, instead of
+  `RESOURCE_EXHAUSTED`. Its condition carries `http_status` (#79).
+* One error detail that does not decode no longer discards the whole
+  `google.rpc.Status`. It is kept as it came, with a warning (#80).
+* A stream's `$status()` names how it ended, such as `"CANCELLED"` or
+  `"DEADLINE_EXCEEDED"`, and a stream of a closed channel prints as
+  cancelled (#86).
+* A comma-joined `-bin` value with a trailing comma gives an empty last
+  value, as a leading comma gives an empty first one (#88).
 * A call or stream with no deadline no longer fails with
   `DEADLINE_EXCEEDED` after 30 seconds, zuhttp's default timeout (#23).
 * A server's malformed `grpc-message` or `-bin` metadata no longer hides

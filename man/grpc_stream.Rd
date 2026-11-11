@@ -16,8 +16,10 @@ grpc_stream(channel, method, request, metadata = NULL, deadline = NULL)
 \item{metadata}{Request metadata: a named character vector, or a named
 list whose \code{-bin} entries are raw vectors. Names are lower-cased. Names
 starting with \verb{grpc-} or \code{:} are reserved, and so are \code{te},
-\code{content-type}, \code{host} and the connection headers HTTP/2 forbids, such
-as \code{connection}. A \code{user-agent} is sent before zugrpc's own.}
+\code{content-type}, \code{content-length}, \code{accept-encoding}, \code{host} and the
+connection headers HTTP/2 forbids, such as \code{connection}. A name given
+more than once is sent once, its values joined by commas. A
+\code{user-agent} is sent before zugrpc's own.}
 
 \item{deadline}{Seconds from now, or an absolute \code{POSIXct}, by which the
 whole stream must end. It is sent as \code{grpc-timeout}. Locally it is
@@ -42,11 +44,14 @@ The stream is an object with five methods:
 at the end of the stream. It raises a condition, as \code{\link[=grpc_call]{grpc_call()}} does,
 when the call ends with a status other than \code{OK}. A stream that fails
 any other way, such as a lost connection, a passed deadline or a broken
-message, raises the same condition again on every later call.
+message, raises the same condition again on every later call. The
+complete messages that arrived before a broken one are returned first.
 \item \verb{$trailers()} returns the trailing metadata once \verb{$next_message()} has
 returned \code{NULL}, and \code{NULL} before.
-\item \verb{$status()} returns the final status name, such as \code{"OK"}, once the
-stream has ended, and \code{NULL} before.
+\item \verb{$status()} returns the final status name once the stream has ended,
+and \code{NULL} before: \code{"OK"}, the server's status, or the status the stream
+failed with, such as \code{"CANCELLED"} or \code{"DEADLINE_EXCEEDED"}. A stream
+that failed without a status, on a protocol error, stays \code{NULL}.
 \item \verb{$cancel()} stops the call. The connection stays open for other calls.
 A second \verb{$cancel()} does nothing. A later \verb{$next_message()} raises
 \code{zugrpc_error_cancelled}.

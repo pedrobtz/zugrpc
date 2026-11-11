@@ -52,3 +52,9 @@ test_that("grpc_timeout() keeps a unit up to exactly eight digits", {
   expect_identical(grpc_timeout(99999.999), "99999999m")
   expect_identical(grpc_timeout(100000), "100000S")
 })
+
+test_that("a positive deadline is never sent as 0n (#87)", {
+  expect_identical(grpc_timeout(1e-16), "1n")
+  expect_identical(grpc_timeout(1e-300), "1n")
+  expect_identical(grpc_timeout(0), "0n")
+})
