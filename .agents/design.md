@@ -353,6 +353,21 @@ forbids (`connection`, `keep-alive`, `proxy-connection`,
 caller's `user-agent` is sent before zugrpc's own. One rule decides the
 reserved names in both directions.
 
+*Decided 2026-11-11 (#81, #82, #83, #84, #85, #87):*
+- **Repeated names.** A metadata name given more than once is sent once,
+  its values joined by commas, as HTTP combines a repeated field. A
+  repeated `user-agent` is joined by spaces, and an empty one adds nothing.
+- **Reserved names.** `content-length` and `accept-encoding` are reserved
+  too. The channel's client decodes no HTTP content coding and sends
+  `accept-encoding: identity`. A caller's client may not set a reserved
+  header, and its `query` is dropped, since it would change the method's
+  path.
+- **URLs.** A `url` whose host or port the transport cannot use is
+  `zugrpc_error_argument` from `grpc_channel()`.
+- **Keepalive.** Its values are bounded by zuhttp's range, 1 ms to
+  2147483.647 s.
+- **Deadlines.** A positive deadline is never sent as `0n`.
+
 ### 6.5 Status and status details
 
 `grpc-status` is an integer mapped to its name from `statuscodes.md`

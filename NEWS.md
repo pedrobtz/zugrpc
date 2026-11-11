@@ -1,5 +1,20 @@
 # zugrpc 0.0.0.9000
 
+* Metadata named `r`, `re` or `req` is sent, instead of failing the call
+  with an error from zuhttp (#81).
+* A metadata name given more than once is sent once, its values joined by
+  commas, instead of failing at call time. Every `user-agent` given is
+  kept, and an empty one no longer adds a leading space (#82).
+* Requests no longer ask for HTTP content coding (`accept-encoding: gzip`),
+  and a response with one is not decoded. `content-length` and
+  `accept-encoding` are reserved names. A client passed to `grpc_channel()`
+  may not set a reserved header, and its `query` is dropped (#83).
+* `grpc_channel()` refuses a URL whose host or port cannot be used, with
+  `zugrpc_error_argument`, instead of every call failing as `UNAVAILABLE`
+  (#84).
+* `grpc_keepalive()` refuses values outside 1 ms to 2147483.647 s, which
+  zuhttp would refuse or clamp, and prints its values in full (#85).
+* A positive deadline below a femtosecond is sent as `1n`, not `0n` (#87).
 * A stream decides its status as a unary call does. A status in the headers
   counts only when no body came, a status in the trailers wins over a body
   that ends inside a message, and an `OK` status in the headers no longer
