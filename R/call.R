@@ -14,8 +14,10 @@
 #' @param metadata Request metadata: a named character vector, or a named
 #'   list whose `-bin` entries are raw vectors. Names are lower-cased. Names
 #'   starting with `grpc-` or `:` are reserved, and so are `te`,
-#'   `content-type`, `host` and the connection headers HTTP/2 forbids, such
-#'   as `connection`. A `user-agent` is sent before zugrpc's own.
+#'   `content-type`, `content-length`, `accept-encoding`, `host` and the
+#'   connection headers HTTP/2 forbids, such as `connection`. A name given
+#'   more than once is sent once, its values joined by commas. A
+#'   `user-agent` is sent before zugrpc's own.
 #' @param deadline Seconds from now, or an absolute `POSIXct`, by which the
 #'   call must finish. It is sent to the server as `grpc-timeout` and also
 #'   bounds the request locally. `NULL` sets no deadline.
@@ -74,19 +76,112 @@ grpc_call <- function(
 ) {
   check_channel(channel)
   req <- build_request(channel, method, request, metadata, deadline)
+  # Pulled, so that the status and headers are known before the body: when
+  # the body passes max_body they still decide the outcome (§6.2, #79).
   res <- tryCatch(
-    zuhttp::zu_perform(req$request, client = channel$client),
+    zuhttp::zu_perform(req$request, client = channel$client, stream = TRUE),
     zuhttp_error = function(cnd) transport_abort(cnd, method)
   )
+  finished <- FALSE
+  on.exit(if (!finished) abort_response(res))
+
+  http_status <- zuhttp::zu_resp_status(res)
+  headers <- zuhttp::zu_resp_headers(res)
+  body <- with_call_context(
+    unary_body(res, http_status, headers, req$deadline_at, channel, method),
+    method = method,
+    http_status = http_status
+  )
+  trailers <- zuhttp::zu_resp_trailers(res)
+  finished <- TRUE
 
   unary_result(
-    http_status = zuhttp::zu_resp_status(res),
-    headers = zuhttp::zu_resp_headers(res),
-    body = zuhttp::zu_resp_raw(res),
-    trailers = zuhttp::zu_resp_trailers(res),
+    http_status = http_status,
+    headers = headers,
+    body = body,
+    trailers = trailers,
     method = method,
     max_message = channel$max_message
   )
+}
+
+# Reads a unary response body to its end. Each read is bounded by what is
+# left of the deadline, so a stall cannot overrun it. The channel's client
+# stops the body at max_message plus the prefix.
+unary_body <- function(
+  res,
+  http_status,
+  headers,
+  deadline_at,
+  channel,
+  method
+) {
+  pieces <- list()
+  repeat {
+    chunk <- tryCatch(
+      zuhttp::zu_resp_read(res, 1024^2, timeout = read_timeout(deadline_at)),
+      zuhttp_error = function(cnd) {
+        body <- do.call(c, c(list(raw()), pieces))
+        unary_read_failed(cnd, http_status, headers, body, channel, method)
+      }
+    )
+    if (length(chunk) == 0L) {
+      break
+    }
+    pieces[[length(pieces) + 1L]] <- chunk
+  }
+  if (length(pieces) == 1L) pieces[[1L]] else do.call(c, c(list(raw()), pieces))
+}
+
+# Seconds left before `deadline_at`, for one read; NULL with no deadline.
+# At least 1 ms, as for the request (§6.6): bytes already there are still
+# read, and zuhttp times out a read that would wait.
+read_timeout <- function(deadline_at) {
+  if (is.null(deadline_at)) {
+    return(NULL)
+  }
+  max(as.numeric(deadline_at) - as.numeric(Sys.time()), 0.001)
+}
+
+# A unary body that failed while being read. Past max_body, what is already
+# known decides first: a non-200 HTTP status, a body that is not gRPC, or a
+# message whose prefix declares more than max_message (§6.2, §6.3).
+unary_read_failed <- function(
+  cnd,
+  http_status,
+  headers,
+  body,
+  channel,
+  method
+) {
+  if (inherits(cnd, "zu_body_limit_error")) {
+    headers <- lower_names(headers)
+    with_call_context(
+      {
+        if (is.null(field(headers, "grpc-status"))) {
+          if (http_status != 200L) {
+            stop(http_status_error(
+              http_status,
+              method,
+              metadata_decode(user_metadata(headers)),
+              list()
+            ))
+          }
+          check_content_type(headers, body)
+        }
+        if (length(body) >= 5L) {
+          frame_split(
+            body[1:5],
+            max_message = channel$max_message,
+            encoding = field(headers, "grpc-encoding")
+          )
+        }
+      },
+      method = method,
+      http_status = http_status
+    )
+  }
+  stop(stamp_call(transport_error(cnd, method), method, http_status))
 }
 
 # The POST of §6.2: headers, metadata, deadline and the framed message.
@@ -103,7 +198,12 @@ build_request <- function(channel, method, request, metadata, deadline) {
   # A caller's user-agent goes before zugrpc's, as other gRPC clients do.
   agent <- user_agent()
   if ("user-agent" %in% names(metadata)) {
-    agent <- paste(metadata[["user-agent"]], agent)
+    # One entry: metadata_encode() joins a repeated name. An empty one adds
+    # nothing, rather than a leading space (#82).
+    caller <- trimws(metadata[["user-agent"]])
+    if (nzchar(caller)) {
+      agent <- paste(caller, agent)
+    }
     metadata <- metadata[names(metadata) != "user-agent"]
   }
   headers <- request_headers(
@@ -112,7 +212,9 @@ build_request <- function(channel, method, request, metadata, deadline) {
     user_agent = agent
   )
   req <- zuhttp::zu_request("POST", paste0(channel$origin, method))
-  req <- do.call(zuhttp::zu_headers, c(list(req), as.list(headers)))
+  # One named vector, never spliced into `...`, where a header named `req`
+  # or a prefix of it would bind to zu_headers()'s own argument (#81).
+  req <- zuhttp::zu_headers(req, headers)
   req <- zuhttp::zu_body_raw(req, body, type = "application/grpc+proto")
   # Without a deadline the request must not keep zuhttp's default timeout,
   # and zuhttp reads a bound that rounds to 0 ms as "its default" too.
@@ -156,32 +258,16 @@ unary_outcome <- function(
   # Decoded once, so that a bad -bin value warns once.
   user_headers <- metadata_decode(user_metadata(headers))
   user_trailers <- metadata_decode(user_metadata(trailers))
-  # Trailers-Only: the status arrives in the one HEADERS block.
-  status_fields <- trailers
-  if (is.null(field(trailers, "grpc-status")) && length(body) == 0L) {
-    status_fields <- headers
-  }
-  status_value <- field(status_fields, "grpc-status")
-
-  if (is.null(status_value)) {
-    if (http_status != 200L) {
-      stop(http_status_error(http_status, method, user_headers, user_trailers))
-    }
-    check_content_type(headers, body)
-  }
-
-  status <- status_from_header(status_value)
-  if (status$name != "OK") {
-    stop(grpc_status_error(
-      status,
-      status_fields,
-      http_status,
-      method,
-      user_headers,
-      user_trailers
-    ))
-  }
-  check_content_type(headers, body)
+  resolve_status(
+    http_status,
+    headers,
+    trailers,
+    body_seen = length(body) > 0L,
+    excerpt = body,
+    method = method,
+    user_headers = user_headers,
+    user_trailers = user_trailers
+  )
 
   framed <- frame_split(
     body,
@@ -212,6 +298,51 @@ unary_outcome <- function(
     trailers = user_trailers,
     status = "OK"
   )
+}
+
+# The status of a response that has ended, in the order of §6.2, for unary
+# calls and streams alike (#58): a grpc-status in the trailers; else, when no
+# body arrived, one in the headers (Trailers-Only); else a non-200 HTTP
+# status maps to a status; else a content-type that is not gRPC is the
+# protocol error; else the status is the missing-status INTERNAL. Raises the
+# condition for anything but OK, and returns the OK status invisibly.
+# `excerpt` is the start of the body, kept by the protocol error.
+resolve_status <- function(
+  http_status,
+  headers,
+  trailers,
+  body_seen,
+  excerpt,
+  method,
+  user_headers,
+  user_trailers
+) {
+  status_fields <- trailers
+  if (is.null(field(trailers, "grpc-status")) && !body_seen) {
+    status_fields <- headers
+  }
+  status_value <- field(status_fields, "grpc-status")
+
+  if (is.null(status_value)) {
+    if (http_status != 200L) {
+      stop(http_status_error(http_status, method, user_headers, user_trailers))
+    }
+    check_content_type(headers, excerpt)
+  }
+
+  status <- status_from_header(status_value)
+  if (status$name != "OK") {
+    stop(grpc_status_error(
+      status,
+      status_fields,
+      http_status,
+      method,
+      user_headers,
+      user_trailers
+    ))
+  }
+  check_content_type(headers, excerpt)
+  invisible(status)
 }
 
 # The condition for a non-OK status, from the fields that carried it: the
@@ -256,8 +387,8 @@ http_status_error <- function(http_status, method, headers, trailers) {
 # A `content-type` not starting with application/grpc is the usual sign of
 # a plain HTTP server; the condition keeps the first 1 KiB of the body.
 check_content_type <- function(headers, body) {
-  type <- field(headers, "content-type")
-  if (is.null(type) || !startsWith(tolower(type), "application/grpc")) {
+  if (!is_grpc_type(headers)) {
+    type <- field(headers, "content-type")
     zugrpc_abort(
       "protocol",
       sprintf(
@@ -269,6 +400,11 @@ check_content_type <- function(headers, body) {
     )
   }
   invisible(headers)
+}
+
+is_grpc_type <- function(headers) {
+  type <- field(headers, "content-type")
+  !is.null(type) && startsWith(tolower(type), "application/grpc")
 }
 
 # The first value of a header, or NULL when it is absent.

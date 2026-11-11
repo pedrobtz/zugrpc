@@ -156,3 +156,50 @@ test_that("a stream's body is unbounded; each message is bounded instead", {
   expect_identical(client_setting(ch$client, "max_body"), 15)
   expect_identical(client_setting(ch$stream_client, "max_body"), Inf)
 })
+
+test_that("a URL with an unusable host or port is an argument error (#84)", {
+  bad <- c(
+    "http://h:1\n",
+    "http://h:1 ",
+    "http://a b:1",
+    "http://:50051",
+    "http://h:",
+    "http://h:0",
+    "http://h:65536",
+    "http://h:99999",
+    "http://h:port",
+    "http://h:1\r\nx: y",
+    "http://h\\x:1"
+  )
+  for (url in bad) {
+    expect_error(grpc_channel(url), class = "zugrpc_error_argument", info = url)
+  }
+  good <- c(
+    "http://localhost:50051",
+    "http://h:1",
+    "http://h:65535",
+    "http://127.0.0.1:50051",
+    "https://[::1]:443",
+    "https://spark_master.local:15002",
+    "http://localhost"
+  )
+  for (url in good) {
+    expect_s3_class(grpc_channel(url), "zugrpc_channel")
+  }
+  expect_identical(grpc_channel("https://[::1]:443")$authority, "[::1]:443")
+})
+
+test_that("grpc_keepalive() takes zuhttp's range, and prints it exactly (#85)", {
+  for (s in c(0.0009, 2147483.648)) {
+    expect_error(grpc_keepalive(time = s), class = "zugrpc_error_argument")
+    expect_error(grpc_keepalive(timeout = s), class = "zugrpc_error_argument")
+  }
+  for (s in c(0.001, 2147483.647)) {
+    k <- grpc_keepalive(time = s, timeout = s)
+    expect_s3_class(grpc_channel("http://h:1", keepalive = k), "zugrpc_channel")
+  }
+  expect_output(
+    print(grpc_keepalive(1234567, 2000000.5)),
+    "PING after 1234567s idle, answer within 2000000.5s"
+  )
+})

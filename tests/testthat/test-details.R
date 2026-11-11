@@ -208,3 +208,33 @@ test_that("a Status with no details decodes to an empty list", {
 test_that("a details warning is also a zugrpc_warning", {
   expect_warning(status_details_decode("!!"), class = "zugrpc_warning")
 })
+
+test_that("one detail that does not decode keeps the Status and the rest", {
+  pool <- rpc_pool()
+  info <- list(
+    type_url = "type.googleapis.com/google.rpc.ErrorInfo",
+    value = zuproto::proto_encode(
+      list(reason = "R", domain = "D"),
+      "google.rpc.ErrorInfo",
+      pool
+    )
+  )
+  broken <- list(
+    type_url = "type.googleapis.com/google.rpc.RetryInfo",
+    value = as.raw(c(0xff, 0xff))
+  )
+  status <- zuproto::proto_encode(
+    list(code = 5L, message = "m", details = list(info, broken)),
+    "google.rpc.Status",
+    pool
+  )
+  expect_warning(
+    d <- status_details_decode(base64_encode(status)),
+    class = "zugrpc_warning_details"
+  )
+  expect_identical(d$code, 5L)
+  expect_identical(d$message, "m")
+  expect_named(d$details, c("ErrorInfo", "google.rpc.RetryInfo"))
+  expect_identical(d$details$ErrorInfo$reason, "R")
+  expect_identical(d$details[["google.rpc.RetryInfo"]], broken)
+})

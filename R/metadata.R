@@ -30,16 +30,45 @@ metadata_encode <- function(metadata) {
     function(i) metadata_value(nms[i], metadata[[i]]),
     character(1)
   )
-  stats::setNames(values, nms)
+  metadata_join(values, nms)
+}
+
+# A name given more than once is sent once, its values joined by commas, as
+# HTTP combines a repeated field and as a reader of `-bin` values splits
+# them (#82). A user-agent is a list of products, so its values are joined
+# by spaces, without empty ones.
+metadata_join <- function(values, nms) {
+  if (!anyDuplicated(nms)) {
+    return(stats::setNames(values, nms))
+  }
+  keys <- unique(nms)
+  joined <- vapply(
+    keys,
+    function(key) {
+      v <- values[nms == key]
+      if (key == "user-agent") {
+        paste(v[nzchar(v)], collapse = " ")
+      } else {
+        paste(v, collapse = ",")
+      }
+    },
+    character(1),
+    USE.NAMES = FALSE
+  )
+  stats::setNames(joined, keys)
 }
 
 # Names that belong to the protocol, not to metadata (§6.2, §6.4): HTTP/2
 # pseudo-headers, the grpc- prefix, te and content-type, and the
 # connection-specific headers HTTP/2 forbids (RFC 9113 §8.2.2), with host,
-# which :authority replaces. The same rule filters received metadata.
+# which :authority replaces, and the body headers the transport sets
+# (content-length; accept-encoding, since gRPC uses no HTTP content coding,
+# #83). The same rule filters received metadata.
 reserved_names <- c(
   "te",
   "content-type",
+  "content-length",
+  "accept-encoding",
   "connection",
   "keep-alive",
   "proxy-connection",
@@ -100,7 +129,13 @@ metadata_decode <- function(headers) {
 }
 
 bin_values <- function(name, value) {
-  pieces <- if (nzchar(value)) strsplit(value, ",", fixed = TRUE)[[1L]] else ""
+  # strsplit() drops a trailing empty piece but keeps a leading one; the
+  # extra comma makes `"QQ,"` two values, as `",QQ"` is (#88).
+  pieces <- if (nzchar(value)) {
+    strsplit(paste0(value, ","), ",", fixed = TRUE)[[1L]]
+  } else {
+    ""
+  }
   tryCatch(
     lapply(trimws(pieces), base64_decode),
     zugrpc_error_protocol = function(e) {

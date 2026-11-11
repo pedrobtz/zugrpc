@@ -7,9 +7,10 @@
 grpc_keepalive(time = 60, timeout = 20)
 }
 \arguments{
-\item{time}{Seconds of idleness before a PING.}
+\item{time}{Seconds of idleness before a PING, from 0.001 (1 ms) to
+2147483.647 (about 24.8 days).}
 
-\item{timeout}{Seconds to wait for the answer.}
+\item{timeout}{Seconds to wait for the answer, in the same range.}
 }
 \value{
 A \code{zugrpc_keepalive}, for \code{\link[=grpc_channel]{grpc_channel()}}.

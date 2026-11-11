@@ -7,6 +7,11 @@ timeout_units <- c(n = 1, u = 1e3, m = 1e6, S = 1e9, M = 60e9, H = 3600e9)
 # server never sees a shorter deadline than the caller set.
 grpc_timeout <- function(seconds) {
   ns <- max(0, ceiling(seconds * 1e9 - 1e-6))
+  # The tolerance for floating-point noise must not round a real deadline
+  # down to 0n, which reads as one that has passed (#87).
+  if (seconds > 0) {
+    ns <- max(ns, 1)
+  }
   for (unit in names(timeout_units)) {
     k <- timeout_units[[unit]]
     value <- if (ns < 2^53) ns %/% k + (ns %% k > 0) else ceiling(ns / k)
