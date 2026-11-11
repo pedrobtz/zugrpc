@@ -1,31 +1,40 @@
-# status conditions put the status name before the message
+# argument errors name what is wrong
 
     Code
-      status_abort("UNAVAILABLE", "connection reset")
+      grpc_channel("localhost:1")
     Condition
       Error:
-      ! UNAVAILABLE: connection reset
+      ! `url` must be one string, http://host:port or https://host:port.
     Code
-      status_abort("UNKNOWN")
+      grpc_channel("http://localhost:1", max_message = -1)
     Condition
       Error:
-      ! UNKNOWN
-
-# a server's status and grpc-message reach the condition
-
+      ! `max_message` must be one number of bytes between 0 and 4 GiB.
     Code
-      grpc_call(m$channel, "/a.B/C", raw())
+      grpc_keepalive(time = 0)
     Condition
       Error:
-      ! UNAVAILABLE: going away
-
----
-
+      ! `time` must be one number of seconds from 0.001 to 2147483.647.
     Code
-      grpc_call(m$channel, "/a.B/C", raw())
+      grpc_call(grpc_channel("http://localhost:1"), "a.B/C", raw())
     Condition
       Error:
-      ! UNAVAILABLE: HTTP status 503 with no grpc-status
+      ! `method` must be one string of the form "/package.Service/Method".
+    Code
+      grpc_call(grpc_channel("http://localhost:1"), "/a.B/C", "text")
+    Condition
+      Error:
+      ! `request` must be a raw vector.
+    Code
+      grpc_call(grpc_channel("http://localhost:1"), "/a.B/C", raw(), deadline = -1)
+    Condition
+      Error:
+      ! `deadline` must be a non-negative number of seconds or one POSIXct time.
+    Code
+      metadata_encode(c(connection = "close"))
+    Condition
+      Error:
+      ! Metadata name 'connection' is reserved for zugrpc.
 
 # transport conditions keep zuhttp's message
 
@@ -91,6 +100,35 @@
       Error:
       ! RESOURCE_EXHAUSTED: received message larger than max (11 vs. 10)
 
+# status conditions put the status name before the message
+
+    Code
+      status_abort("UNAVAILABLE", "connection reset")
+    Condition
+      Error:
+      ! UNAVAILABLE: connection reset
+    Code
+      status_abort("UNKNOWN")
+    Condition
+      Error:
+      ! UNKNOWN
+
+# a server's status and grpc-message reach the condition
+
+    Code
+      grpc_call(m$channel, "/a.B/C", raw())
+    Condition
+      Error:
+      ! UNAVAILABLE: going away
+
+---
+
+    Code
+      grpc_call(m$channel, "/a.B/C", raw())
+    Condition
+      Error:
+      ! UNAVAILABLE: HTTP status 503 with no grpc-status
+
 # warnings say what was dropped
 
     Code
@@ -112,42 +150,4 @@
       Received metadata 'x-bin' is not base64 and was dropped.
     Output
       named list()
-
-# argument errors name what is wrong
-
-    Code
-      grpc_channel("localhost:1")
-    Condition
-      Error:
-      ! `url` must be one string, http://host:port or https://host:port.
-    Code
-      grpc_channel("http://localhost:1", max_message = -1)
-    Condition
-      Error:
-      ! `max_message` must be one number of bytes between 0 and 4 GiB.
-    Code
-      grpc_keepalive(time = 0)
-    Condition
-      Error:
-      ! `time` must be one number of seconds from 0.001 to 2147483.647.
-    Code
-      grpc_call(grpc_channel("http://localhost:1"), "a.B/C", raw())
-    Condition
-      Error:
-      ! `method` must be one string of the form "/package.Service/Method".
-    Code
-      grpc_call(grpc_channel("http://localhost:1"), "/a.B/C", "text")
-    Condition
-      Error:
-      ! `request` must be a raw vector.
-    Code
-      grpc_call(grpc_channel("http://localhost:1"), "/a.B/C", raw(), deadline = -1)
-    Condition
-      Error:
-      ! `deadline` must be a non-negative number of seconds or one POSIXct time.
-    Code
-      metadata_encode(c(connection = "close"))
-    Condition
-      Error:
-      ! Metadata name 'connection' is reserved for zugrpc.
 

@@ -504,45 +504,36 @@ test_that("metadata named like zu_headers()'s argument is sent (#81)", {
   }
 })
 
-test_that("a repeated metadata name is sent once, its values joined (#82)", {
+test_that("a repeated metadata name is an argument error, nothing sent (#82)", {
   m <- mock_channel(grpc_response())
-  grpc_call(m$channel, "/a.B/C", raw(), metadata = c(A = "1", a = "2"))
-  expect_identical(sent_header(m$seen$requests[[1L]], "a"), "1,2")
-
-  grpc_call(
-    m$channel,
-    "/a.B/C",
-    raw(),
-    metadata = list("k-bin" = as.raw(1), "k-bin" = as.raw(2))
+  repeats <- list(
+    c(A = "1", a = "2"),
+    list("k-bin" = as.raw(1), "k-bin" = as.raw(2)),
+    c("user-agent" = "one", "user-agent" = "two")
   )
-  sent <- sent_header(m$seen$requests[[2L]], "k-bin")
-  expect_identical(sent, "AQ,Ag")
-  # What a reader of the joined value gets back.
-  expect_identical(
-    unname(metadata_decode(c("k-bin" = sent))),
-    list(as.raw(1), as.raw(2))
+  for (md in repeats) {
+    expect_error(
+      grpc_call(m$channel, "/a.B/C", raw(), metadata = md),
+      class = "zugrpc_error_argument"
+    )
+  }
+  expect_length(m$seen$requests, 0L)
+  # Channel headers are refused when the channel is made, not at each call.
+  expect_error(
+    grpc_channel("http://localhost:1", headers = c(x = "1", X = "2")),
+    class = "zugrpc_error_argument"
   )
-
-  m <- mock_channel(grpc_response(), headers = c(x = "1", x = "2"))
-  grpc_call(m$channel, "/a.B/C", raw())
-  expect_identical(sent_header(m$seen$requests[[1L]], "x"), "1,2")
 })
 
-test_that("every user-agent given is kept, and an empty one adds nothing", {
+test_that("an empty user-agent adds nothing to zugrpc's own", {
   m <- mock_channel(grpc_response())
-  grpc_call(
-    m$channel,
-    "/a.B/C",
-    raw(),
-    metadata = c("user-agent" = "one", "user-agent" = "two")
-  )
-  expect_match(
-    sent_header(m$seen$requests[[1L]], "user-agent"),
-    "^one two zugrpc/"
-  )
-
   grpc_call(m$channel, "/a.B/C", raw(), metadata = c("user-agent" = ""))
-  expect_match(sent_header(m$seen$requests[[2L]], "user-agent"), "^zugrpc/")
+  expect_match(sent_header(m$seen$requests[[1L]], "user-agent"), "^zugrpc/")
+  grpc_call(m$channel, "/a.B/C", raw(), metadata = c("user-agent" = "app/1"))
+  expect_match(
+    sent_header(m$seen$requests[[2L]], "user-agent"),
+    "^app/1 zugrpc/"
+  )
 })
 
 test_that("the transport's body headers are reserved (#83)", {

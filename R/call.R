@@ -15,9 +15,8 @@
 #'   list whose `-bin` entries are raw vectors. Names are lower-cased. Names
 #'   starting with `grpc-` or `:` are reserved, and so are `te`,
 #'   `content-type`, `content-length`, `accept-encoding`, `host` and the
-#'   connection headers HTTP/2 forbids, such as `connection`. A name given
-#'   more than once is sent once, its values joined by commas. A
-#'   `user-agent` is sent before zugrpc's own.
+#'   connection headers HTTP/2 forbids, such as `connection`. Each name may
+#'   be given once. A `user-agent` is sent before zugrpc's own.
 #' @param deadline Seconds from now, or an absolute `POSIXct`, by which the
 #'   call must finish. It is sent to the server as `grpc-timeout` and also
 #'   bounds the request locally. `NULL` sets no deadline.
@@ -198,8 +197,8 @@ build_request <- function(channel, method, request, metadata, deadline) {
   # A caller's user-agent goes before zugrpc's, as other gRPC clients do.
   agent <- user_agent()
   if ("user-agent" %in% names(metadata)) {
-    # One entry: metadata_encode() joins a repeated name. An empty one adds
-    # nothing, rather than a leading space (#82).
+    # One entry: metadata_encode() refuses a repeated name. An empty one
+    # adds nothing, rather than a leading space (#82).
     caller <- trimws(metadata[["user-agent"]])
     if (nzchar(caller)) {
       agent <- paste(caller, agent)
