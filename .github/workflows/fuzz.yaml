@@ -4,16 +4,17 @@
 # target against an oracle; tools/fuzz/reach.R runs it under covr and fails
 # when a parser's reach drops below its floor.
 #
-# The seed is the run's id, printed in the log: a failure is reproduced with
+# Pull requests fuzz for 120 s, the weekly run for 900 s. The seed is the
+# run's id, printed in the log: a failure is reproduced with
 #   Rscript tools/fuzz/fuzz.R <seconds> <seed>
 
 on:
-  push:
-    branches: [main, master]
+  # No `push:`: a pull request already checks its merge with main, and the
+  # schedule checks main (r-actions README, "Pushes to main"). The schedule
+  # takes the slot after coverage.yaml's, with a longer budget.
   pull_request:
   schedule:
-    # Nightly, with a longer budget.
-    - cron: "17 3 * * *"
+    - cron: "33 4 * * 0"
   workflow_dispatch:
 
 name: fuzz
