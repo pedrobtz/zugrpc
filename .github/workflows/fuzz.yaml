@@ -1,0 +1,54 @@
+# Generated-input fuzzing of zugrpc's parsers, and what it reaches (#59,
+# #60). r-actions' fuzz.yml is libFuzzer over C, and zugrpc has no C (D1),
+# so this workflow is the package's own. tools/fuzz/fuzz.R checks every
+# target against an oracle; tools/fuzz/reach.R runs it under covr and fails
+# when a parser's reach drops below its floor.
+#
+# The seed is the run's id, printed in the log: a failure is reproduced with
+#   Rscript tools/fuzz/fuzz.R <seconds> <seed>
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  schedule:
+    # Nightly, with a longer budget.
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+name: fuzz
+
+permissions: read-all
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  fuzz:
+    runs-on: ubuntu-latest
+    name: fuzz and reach
+    timeout-minutes: 30
+    env:
+      FUZZ_SEED: ${{ github.run_id }}
+      FUZZ_SECONDS: ${{ github.event_name == 'schedule' && '900' || '120' }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: release
+          use-public-rspm: true
+
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          extra-packages: any::jsonlite, any::covr
+
+      - name: Install
+        run: R CMD INSTALL .
+
+      - name: Fuzz
+        run: Rscript tools/fuzz/fuzz.R "$FUZZ_SECONDS" "$FUZZ_SEED"
+
+      - name: Reach
+        run: Rscript tools/fuzz/reach.R 60 "$FUZZ_SEED"
