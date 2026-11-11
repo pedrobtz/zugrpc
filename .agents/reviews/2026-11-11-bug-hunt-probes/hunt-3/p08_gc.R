@@ -1,0 +1,32 @@
+source(file.path(dirname(sub("--file=", "", grep("--file=", commandArgs(), value = TRUE))), "common.R"))
+ch <- grpc_channel(URL)
+g <- function() { invisible(gc()); invisible(gc()) }
+cat("## A: drop open unread\n"); s <- scn(ch, "h,m3,w"); rm(s); g(); print(ch); snew()
+cat("## B: drop open, partially read\n"); s <- scn(ch, "h,m3,w"); invisible(s$next_message()); rm(s); g(); print(ch); snew()
+cat("## C: drop ended\n"); s <- scn(ch, "h,m1,t0"); while (!is.null(s$next_message())) {}; rm(s); g(); print(ch); snew()
+cat("## D: drop cancelled\n"); s <- scn(ch, "h,m1,w"); s$cancel(); rm(s); g(); snew()
+cat("## E: drop failed\n"); s <- scn(ch, "h,b,w"); try(s$next_message(), silent = TRUE); rm(s); g(); snew()
+cat("## F: keep only a method closure: stream must stay alive\n"); nx <- scn(ch, "h,m1,s400,m1,t0")$next_message; g(); print(ch); for (i in 1:3) show("next", nx()); rm(nx); snew()
+cat("## G: copies share state\n"); s <- scn(ch, "h,m3,w"); s2 <- s; s2$cancel(); show("orig next", s$next_message()); print(s); ch2 <- ch
+cat("## H: finaliser of dropped stream runs inside another stream's read loop\n")
+b <- scn(ch, "h,m1,s300,m1,s300,m1,t0"); a <- scn(ch, "h,m1,w"); rm(a)
+n <- 0; while (!is.null(m <- b$next_message())) { n <- n + 1; g() }; cat("b messages:", n, b$status(), "\n"); print(ch); snew()
+cat("## I: reading stream b from inside stream a's loop\n")
+a <- scn(ch, "h,m1,s100,m1,s100,m1,t0"); out <- character()
+while (!is.null(m <- a$next_message())) { b <- scn(ch, "h,m2,t0"); while (!is.null(mb <- b$next_message())) out <- c(out, paste0("a", as.integer(m), "b", as.integer(mb))) }
+cat(out, "\n"); snew()
+cat("## J: drop channel and stream together (open stream): RST? conn closed?\n")
+local({ c3 <- grpc_channel(URL); s <- scn(c3, "h,m1,w"); invisible(grpc_call(c3, M, raw())) }); g(); snew(0.5)
+cat("## K: drop channel only, keep open stream; read on\n")
+s <- local({ c4 <- grpc_channel(URL); scn(c4, "h,m1,s300,m1,t0") }); g(); for (i in 1:3) show("next", s$next_message()); snew()
+cat("## L: close, then GC of open stream: no second RST\n")
+c5 <- grpc_channel(URL); s <- scn(c5, "h,m1,w"); grpc_close(c5); rm(s); g(); snew()
+cat("## M: stream created, error in new_stream (non-200 / not grpc): registry empty?\n")
+c6 <- grpc_channel(paste0("http://127.0.0.1:", PORT)); 
+cat("## N: 2000 sequential streams fully read: registry and next_id\n")
+for (i in 1:2000) { s <- scn(ch, "h,m1,t0"); while (!is.null(s$next_message())) {} }
+cat("registry:", length(ls(ch$streams)), "next_id:", ch$next_id, "conns:", length(grep("OPEN", readLines(LOG))), "\n")
+cat("## O: 300 dropped-unread streams without explicit gc: registry growth\n")
+for (i in 1:300) scn(ch, "h,m1,w"); cat("registry before gc:", length(ls(ch$streams)), "\n"); g(); cat("after gc:", length(ls(ch$streams)), "\n")
+Sys.sleep(.3); l <- readLines(LOG); cat("conns:", length(grep("OPEN", l)), "closed:", length(grep("CLOSED", l)), "RST total:", length(grep("RST_STREAM", l)), "\n")
+show("call", grpc_call(ch, M, raw())$message)

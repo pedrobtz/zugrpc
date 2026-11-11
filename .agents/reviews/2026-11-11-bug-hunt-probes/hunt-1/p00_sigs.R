@@ -1,0 +1,5 @@
+.libPaths(c("<W>/lib", .libPaths())); library(zugrpc)
+print(args(zuhttp::zu_headers)); print(zuhttp::zu_headers)
+print(args(zuhttp::zu_pool)); print(args(zuhttp::zu_client)); print(args(zuhttp::zu_req_timeout)); print(zuhttp::zu_req_timeout)
+print(args(zuhttp::zu_request)); print(packageVersion("zuhttp"))
+str(unclass(zuhttp::zu_client()))

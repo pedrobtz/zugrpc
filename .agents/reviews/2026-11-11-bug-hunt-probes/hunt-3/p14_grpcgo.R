@@ -1,0 +1,11 @@
+source(file.path(dirname(sub("--file=", "", grep("--file=", commandArgs(), value = TRUE))), "common.R"))
+ch <- grpc_channel("http://127.0.0.1:47341")
+ST <- "/zugrpc.test.Status/Stall"
+cat("## real grpc-go: 30 x (stall stream, cancel), calls in between\n")
+res <- vapply(1:30, function(i) { s <- grpc_stream(ch, ST, raw()); s$cancel(); class(tryCatch(grpc_call(ch, "/zugrpc.test.Status/Spark", raw()), error = identity))[1] }, ""); print(table(res))
+cat("## 5 open stalls + StreamFail read through; then close\n")
+ss <- lapply(1:5, function(i) grpc_stream(ch, ST, raw())); f <- grpc_stream(ch, "/zugrpc.test.Status/StreamFail", raw())
+for (i in 1:5) show("fail next", f$next_message()); state(f)
+show("stall deadline", { s <- grpc_stream(ch, ST, raw(), deadline = 0.4); s$next_message() })
+rm(ss); invisible(gc()); print(ch); show("call", class(tryCatch(grpc_call(ch, "/zugrpc.test.Status/Spark", raw()), error = identity))[1])
+s <- grpc_stream(ch, "/zugrpc.test.Status/SlowStall", raw()); show("next", s$next_message()); grpc_close(ch); show("next", s$next_message())

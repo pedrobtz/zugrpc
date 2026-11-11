@@ -1,0 +1,12 @@
+.libPaths(c(Sys.getenv("VLIB"), .libPaths())); library(zugrpc)
+chan <- function(body, trailers) { f <- function(req) zuhttp::zu_response(200L, headers = c("content-type"="application/grpc"), body = body, trailers = trailers)
+  grpc_channel("http://localhost:1", client = zuhttp::zu_client(transport = zuhttp::zu_mock_transport(f))) }
+ch <- chan(raw(), c("grpc-status"="5", "x-bin"="!!!"))
+st <- grpc_stream(ch, "/a.B/C", raw())
+r1 <- tryCatch(st$next_message(), warning = function(w) paste("warning:", class(w)[1]), error = function(e) class(e)[1])
+r2 <- tryCatch(if (is.null(v <- st$next_message())) "NULL" else "msg", error = function(e) class(e)[1])
+cat("F2 first:", r1, " second:", r2, " status:", if (is.null(st$status())) "NULL" else st$status(), "\n")
+old <- options(warn = 2); st <- grpc_stream(ch, "/a.B/C", raw())
+r1 <- tryCatch(st$next_message(), error = function(e) class(e)[1]); r2 <- tryCatch(if (is.null(st$next_message())) "NULL" else "msg", error = function(e) class(e)[1]); options(old)
+cat("F2 warn=2 first:", r1, " second:", r2, "\n")
+ch <- chan(as.raw(c(0,0,0,0,1,1)), c("grpc-status"="0")); st <- grpc_stream(ch, "/a.B/C", raw()); grpc_close(ch); print(st)
