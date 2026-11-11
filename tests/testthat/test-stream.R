@@ -471,3 +471,214 @@ test_that("a stream that failed without a status prints as failed", {
     print(st)
   })
 })
+
+# The status order, the same as a unary call's (§6.2) ---------------------
+
+test_that("a header grpc-status counts on a stream only when no body came", {
+  # Messages and no trailers: the status is missing, whatever the headers
+  # said (#58).
+  m <- mock_channel(grpc_response(
+    body = stream_body(as.raw(1)),
+    headers = c("content-type" = "application/grpc", "grpc-status" = "0"),
+    trailers = c()
+  ))
+  st <- grpc_stream(m$channel, "/a.B/C", raw())
+  expect_identical(st$next_message(), as.raw(1))
+  expect_error(st$next_message(), class = "zugrpc_error_internal")
+  expect_identical(st$status(), "INTERNAL")
+})
+
+test_that("a trailers status wins over a body that ends inside a message", {
+  m <- mock_channel(grpc_response(
+    body = wire_message(as.raw(1:9))[1:8],
+    trailers = c("grpc-status" = "5", "grpc-message" = "nf")
+  ))
+  st <- grpc_stream(m$channel, "/a.B/C", raw())
+  cnd <- expect_error(st$next_message(), class = "zugrpc_error_not_found")
+  expect_identical(cnd$grpc_message, "nf")
+  expect_identical(st$status(), "NOT_FOUND")
+})
+
+test_that("an OK status in the headers does not make HTML a gRPC body", {
+  m <- mock_channel(grpc_response(
+    body = stream_body(as.raw(1)),
+    headers = c("content-type" = "text/html", "grpc-status" = "0")
+  ))
+  expect_error(
+    grpc_stream(m$channel, "/a.B/C", raw()),
+    class = "zugrpc_error_protocol"
+  )
+})
+
+test_that("a stream's not-gRPC condition keeps the first 1 KiB of the body", {
+  for (n in c(1023, 1024, 1025)) {
+    page <- as.raw(rep(0x41, n))
+    m <- mock_channel(grpc_response(
+      body = page,
+      trailers = NULL,
+      headers = c("content-type" = "text/html")
+    ))
+    cnd <- expect_error(
+      grpc_stream(m$channel, "/a.B/C", raw()),
+      class = "zugrpc_error_protocol"
+    )
+    expect_identical(cnd$body, page[seq_len(min(n, 1024))], info = n)
+  }
+})
+
+test_that("unary and stream reach the same outcome on the same response", {
+  # Each response carries at most one message, so a unary call can end OK.
+  msg <- wire_message(as.raw(7))
+  grpc <- c("content-type" = "application/grpc")
+  cases <- list(
+    ok = list(msg, grpc, c("grpc-status" = "0"), 200L),
+    trailers_only = list(raw(), c(grpc, "grpc-status" = "9"), c(), 200L),
+    trailer_status = list(msg, grpc, c("grpc-status" = "5"), 200L),
+    both = list(
+      msg,
+      c(grpc, "grpc-status" = "5"),
+      c("grpc-status" = "0"),
+      200L
+    ),
+    header_status_body = list(msg, c(grpc, "grpc-status" = "0"), c(), 200L),
+    missing = list(msg, grpc, c(), 200L),
+    malformed = list(msg, grpc, c("grpc-status" = "x"), 200L),
+    unknown = list(msg, grpc, c("grpc-status" = "99"), 200L),
+    truncated = list(msg[1:5], grpc, c("grpc-status" = "13"), 200L),
+    truncated_ok = list(msg[1:5], grpc, c("grpc-status" = "0"), 200L),
+    flag = list(
+      wire_message(as.raw(7), flag = 2L),
+      grpc,
+      c("grpc-status" = "0"),
+      200L
+    ),
+    http_503 = list(raw(), c("content-type" = "text/plain"), c(), 503L),
+    html = list(
+      charToRaw("<html>"),
+      c("content-type" = "text/html"),
+      c(),
+      200L
+    ),
+    html_ok = list(
+      msg,
+      c("content-type" = "text/html", "grpc-status" = "0"),
+      c(),
+      200L
+    )
+  )
+  outcome <- function(expr) {
+    tryCatch(
+      {
+        force(expr)
+        "OK"
+      },
+      zugrpc_error = function(cnd) class(cnd)[1L]
+    )
+  }
+  for (name in names(cases)) {
+    x <- cases[[name]]
+    m <- mock_channel(grpc_response(
+      body = x[[1L]],
+      headers = x[[2L]],
+      trailers = x[[3L]],
+      status = x[[4L]]
+    ))
+    unary <- outcome(grpc_call(m$channel, "/a.B/C", raw()))
+    stream <- outcome({
+      st <- grpc_stream(m$channel, "/a.B/C", raw())
+      while (!is.null(st$next_message())) {}
+    })
+    expect_identical(stream, unary, info = name)
+  }
+})
+
+# What the caller gets before an error ------------------------------------
+
+test_that("messages before a bad prefix arrive first, in one read or many", {
+  bad <- list(
+    flag = wire_message(as.raw(1), flag = 2L),
+    oversize = wire_message(raw(11))
+  )
+  for (kind in names(bad)) {
+    body <- c(stream_body(as.raw(1), as.raw(2)), bad[[kind]])
+    for (size in c(65536, 1)) {
+      local_mocked_bindings(
+        resp_read = function(res, n) zuhttp::zu_resp_read(res, size)
+      )
+      m <- mock_channel(grpc_response(body = body), max_message = 10)
+      st <- grpc_stream(m$channel, "/a.B/C", raw())
+      info <- paste(kind, size)
+      expect_identical(st$next_message(), as.raw(1), info = info)
+      expect_identical(st$next_message(), as.raw(2), info = info)
+      first <- expect_error(st$next_message(), class = "zugrpc_error")
+      again <- expect_error(st$next_message(), class = "zugrpc_error")
+      expect_identical(class(again), class(first), info = info)
+      expect_identical(first$method, "/a.B/C", info = info)
+      expect_length(ls(m$channel$streams), 0L)
+    }
+  }
+})
+
+test_that("a warning while ending cannot turn a failed stream into a clean end", {
+  # The trailers carry NOT_FOUND and a -bin value that is not base64 (#77).
+  respond <- grpc_response(
+    body = raw(),
+    trailers = c("grpc-status" = "5", "x-bin" = "!!!")
+  )
+
+  m <- mock_channel(respond)
+  st <- grpc_stream(m$channel, "/a.B/C", raw())
+  w <- tryCatch(st$next_message(), warning = identity)
+  expect_s3_class(w, "zugrpc_warning_metadata")
+  expect_error(st$next_message(), class = "zugrpc_error_not_found")
+  expect_null(st$next_message())
+  expect_identical(st$status(), "NOT_FOUND")
+
+  withr::local_options(warn = 2)
+  m <- mock_channel(respond)
+  st <- grpc_stream(m$channel, "/a.B/C", raw())
+  expect_error(st$next_message())
+  expect_error(st$next_message(), class = "zugrpc_error_not_found")
+  expect_identical(st$status(), "NOT_FOUND")
+})
+
+# The terminal state, whichever way a stream ends (#86) -------------------
+
+test_that("$status() names how a stream ended, and NULL before", {
+  m <- mock_channel(grpc_response(body = stream_body(as.raw(1), as.raw(2))))
+  st <- grpc_stream(m$channel, "/a.B/C", raw())
+  expect_null(st$status())
+  st$cancel()
+  expect_identical(st$status(), "CANCELLED")
+
+  st <- grpc_stream(m$channel, "/a.B/C", raw(), deadline = 30)
+  attr(st, "env")$deadline_at <- Sys.time() - 1
+  expect_error(st$next_message(), class = "zugrpc_error_deadline_exceeded")
+  expect_identical(st$status(), "DEADLINE_EXCEEDED")
+
+  st <- grpc_stream(m$channel, "/a.B/C", raw())
+  local({
+    local_mocked_bindings(
+      resp_read = function(res, n) {
+        stop(zuhttp::zu_condition("zu_io_error", "reset"))
+      }
+    )
+    expect_error(st$next_message(), class = "zugrpc_error_transport")
+  })
+  expect_identical(st$status(), "UNAVAILABLE")
+
+  # A protocol error is not a status.
+  m <- mock_channel(grpc_response(body = wire_message(as.raw(1), flag = 2L)))
+  st <- grpc_stream(m$channel, "/a.B/C", raw())
+  expect_error(st$next_message(), class = "zugrpc_error_protocol")
+  expect_null(st$status())
+})
+
+test_that("grpc_close() leaves each open stream cancelled at once", {
+  m <- mock_channel(grpc_response(body = stream_body(as.raw(1))))
+  st <- grpc_stream(m$channel, "/a.B/C", raw())
+  grpc_close(m$channel)
+  expect_identical(st$status(), "CANCELLED")
+  expect_output(print(st), "state: cancelled")
+  expect_error(st$next_message(), class = "zugrpc_error_cancelled")
+})

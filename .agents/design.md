@@ -293,6 +293,15 @@ the status is the missing-status `INTERNAL`. So a `grpc-status` beats the
 HTTP status. A unary response with zero messages, like one with two, or
 one that ends inside a message, is `zugrpc_error_protocol`.
 
+*Decided 2026-11-11 (#58, #79):* unary calls and streams resolve the status
+with one function, so the same response ends the same way on both. A stream
+fails at once, from its headers, on a non-200 status or a content-type that
+is not gRPC, unless the headers carry a non-OK `grpc-status`. Its condition
+keeps the first 1 KiB of the body, as a unary call's does. A unary body is
+pulled, so the status and headers are known before it is read. When it
+passes `max_message`, a non-200 status or a body that is not gRPC still
+decides first, and a too-large message is `RESOURCE_EXHAUSTED`.
+
 ### 6.3 Messages and limits
 
 A message is complete when five bytes of prefix and the declared
@@ -343,6 +352,21 @@ forbids (`connection`, `keep-alive`, `proxy-connection`,
 `transfer-encoding`, `upgrade`) are `zugrpc_error_argument`, and a
 caller's `user-agent` is sent before zugrpc's own. One rule decides the
 reserved names in both directions.
+
+*Decided 2026-11-11 (#81, #82, #83, #84, #85, #87):*
+- **Repeated names.** A metadata name given more than once is sent once,
+  its values joined by commas, as HTTP combines a repeated field. A
+  repeated `user-agent` is joined by spaces, and an empty one adds nothing.
+- **Reserved names.** `content-length` and `accept-encoding` are reserved
+  too. The channel's client decodes no HTTP content coding and sends
+  `accept-encoding: identity`. A caller's client may not set a reserved
+  header, and its `query` is dropped, since it would change the method's
+  path.
+- **URLs.** A `url` whose host or port the transport cannot use is
+  `zugrpc_error_argument` from `grpc_channel()`.
+- **Keepalive.** Its values are bounded by zuhttp's range, 1 ms to
+  2147483.647 s.
+- **Deadlines.** A positive deadline is never sent as `0n`.
 
 ### 6.5 Status and status details
 
@@ -426,6 +450,20 @@ protocol, local deadline) raises the same condition on every later
 then returns `NULL`, with `$status()` set. The finaliser's
 `zu_resp_abort()` from GC is the same abort zuhttp's own finaliser makes
 (`zuh_open_body_free()`), and it is registered before the response is.
+
+*Decided 2026-11-11 (#76, #77, #86):* the complete messages that arrived
+before a broken prefix are returned before its error. A stream is marked
+ended only once its status is recorded. Warnings from its trailers are
+signalled after that, so one that unwinds the read cannot make a failed
+stream read as a clean end; the status is raised by the next read instead.
+`$status()` names how every stream ended: the server's status, or the one it
+failed with, such as `CANCELLED` after `$cancel()` or `grpc_close()`. It
+stays `NULL` only for a protocol error.
+
+*Known 2026-11-11 (#78):* when zuhttp raises its timeout or interrupt
+condition inside a read, it has already closed the HTTP/2 connection, not
+reset the stream (zuhttp#338). zugrpc closes nothing itself, so D8 holds to
+the letter, but the channel loses that connection until zuhttp is fixed.
 
 ### 6.7 What Spark cannot use
 

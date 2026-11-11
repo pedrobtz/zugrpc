@@ -35,28 +35,30 @@ frame_length <- function(prefix) {
 # messages cost one copy each and nothing quadratic. A declared length above
 # `max_message` fails as soon as its prefix is complete, before the body is
 # read (§6.3).
+#
+# With `partial = TRUE` a bad prefix does not raise: the messages before it
+# are returned with the condition as `error`, so a stream can deliver them
+# first, whatever DATA frames the bytes came in (#76).
 frame_split <- function(
   buf,
   max_message = default_max_message,
-  encoding = NULL
+  encoding = NULL,
+  partial = FALSE
 ) {
   n <- length(buf)
   messages <- vector("list", 16L)
   count <- 0L
   pos <- 1L
+  error <- NULL
   while (n - pos + 1L >= 5L) {
     flag <- as.integer(buf[pos])
     len <- frame_length(buf[pos:(pos + 4L)])
-    check_flag(flag, encoding)
-    if (len > max_message) {
-      status_abort(
-        "RESOURCE_EXHAUSTED",
-        sprintf(
-          "received message larger than max (%.0f vs. %.0f)",
-          len,
-          max_message
-        )
-      )
+    error <- prefix_error(flag, len, max_message, encoding)
+    if (!is.null(error)) {
+      if (!partial) {
+        stop(error)
+      }
+      break
     }
     if (n - pos + 1L - 5L < len) {
       break
@@ -72,27 +74,44 @@ frame_split <- function(
   }
   list(
     messages = messages[seq_len(count)],
-    remainder = if (pos <= n) buf[pos:n] else raw()
+    remainder = if (pos <= n) buf[pos:n] else raw(),
+    error = error
   )
 }
 
-check_flag <- function(flag, encoding) {
-  if (flag == 0L) {
-    return(invisible(flag))
+# The condition a message prefix fails with, or NULL when it is good: a flag
+# other than 0, or a declared length above `max_message`.
+prefix_error <- function(flag, len, max_message, encoding) {
+  if (flag != 0L) {
+    return(flag_error(flag, encoding))
   }
+  if (len > max_message) {
+    return(status_error(
+      "RESOURCE_EXHAUSTED",
+      sprintf(
+        "received message larger than max (%.0f vs. %.0f)",
+        len,
+        max_message
+      )
+    ))
+  }
+  NULL
+}
+
+flag_error <- function(flag, encoding) {
   if (flag != 1L) {
-    zugrpc_abort(
+    return(zugrpc_error(
       "protocol",
       sprintf("Invalid compressed-flag byte %d in a gRPC message.", flag)
-    )
+    ))
   }
   if (is.null(encoding) || identical(encoding, "identity")) {
-    zugrpc_abort(
+    return(zugrpc_error(
       "protocol",
       "A compressed message arrived without a grpc-encoding."
-    )
+    ))
   }
-  status_abort(
+  status_error(
     "UNIMPLEMENTED",
     sprintf("grpc-encoding '%s' is not supported", encoding)
   )

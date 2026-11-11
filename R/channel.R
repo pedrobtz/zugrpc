@@ -10,8 +10,9 @@
 #' An `https://` URL negotiates HTTP/2 over TLS. gRPC has no HTTP/1.1
 #' fallback, so the channel's client always requires HTTP/2.
 #'
-#' @param url The server, as `http://host:port` or `https://host:port`. No
-#'   path, query or user information.
+#' @param url The server, as `http://host:port` or `https://host:port`. The
+#'   host is a name, an IPv4 address or a bracketed IPv6 address, and the
+#'   port is from 1 to 65535. No path, query or user information.
 #' @param headers Metadata sent on every call: a named character vector or a
 #'   named list, as `metadata` in [grpc_call()], with the same reserved
 #'   names. A call's own metadata replaces a channel header of the same
@@ -27,8 +28,10 @@
 #'   with `RESOURCE_EXHAUSTED`.
 #' @param client A [zuhttp::zu_client()] to build on, so that proxies, TLS
 #'   pins, middleware and test transports come from `zuhttp` unchanged. The
-#'   channel derives its own client from it, with HTTP/2 required. `NULL`
-#'   builds a fresh one.
+#'   channel derives its own client from it, with HTTP/2 required, no HTTP
+#'   content coding and no query. Its headers may not use a name reserved
+#'   for metadata (see `metadata` in [grpc_call()]). `NULL` builds a fresh
+#'   one.
 #'
 #' @return A `zugrpc_channel`.
 #' @seealso [grpc_call()] to make a call, [grpc_close()] to close it.
@@ -64,6 +67,21 @@ grpc_channel <- function(
   if (!is.null(client) && !inherits(client, "zu_client")) {
     zugrpc_abort("argument", "`client` must be a zuhttp::zu_client().")
   }
+  if (!is.null(client)) {
+    # The client's own headers go on every request, so they keep the rules
+    # metadata keeps (§6.4, #83).
+    client_names <- tolower(names(client$headers))
+    reserved <- is_reserved_name(client_names)
+    if (any(reserved)) {
+      zugrpc_abort(
+        "argument",
+        sprintf(
+          "`client` sets header '%s', which is reserved for zugrpc.",
+          client_names[reserved][1L]
+        )
+      )
+    }
+  }
   if (!is.null(keepalive) && !inherits(keepalive, "zugrpc_keepalive")) {
     zugrpc_abort("argument", "`keepalive` must come from grpc_keepalive().")
   }
@@ -71,6 +89,10 @@ grpc_channel <- function(
   settings <- list(
     http2 = "required",
     check = FALSE,
+    # gRPC uses no HTTP content coding: ask for none and decode none (#83).
+    decode = FALSE,
+    # A query would change the method's path, which check_method() guards.
+    query = NULL,
     # A unary body is one message and its prefix; the default is 16 MiB.
     max_body = max_message + 5,
     user_agent = user_agent()
@@ -148,8 +170,9 @@ print.zugrpc_channel <- function(x, ...) {
 #' idle for `time` seconds is sent an HTTP/2 PING before its next call, and
 #' replaced by a new one if no answer comes within `timeout` seconds.
 #'
-#' @param time Seconds of idleness before a PING.
-#' @param timeout Seconds to wait for the answer.
+#' @param time Seconds of idleness before a PING, from 0.001 (1 ms) to
+#'   2147483.647 (about 24.8 days).
+#' @param timeout Seconds to wait for the answer, in the same range.
 #'
 #' @return A `zugrpc_keepalive`, for [grpc_channel()].
 #' @export
@@ -157,8 +180,8 @@ print.zugrpc_channel <- function(x, ...) {
 #' grpc_keepalive()
 #' grpc_keepalive(time = 30, timeout = 10)
 grpc_keepalive <- function(time = 60, timeout = 20) {
-  check_positive_seconds(time, "time")
-  check_positive_seconds(timeout, "timeout")
+  check_keepalive_seconds(time, "time")
+  check_keepalive_seconds(timeout, "timeout")
   structure(
     list(time = as.numeric(time), timeout = as.numeric(timeout)),
     class = "zugrpc_keepalive"
@@ -168,9 +191,9 @@ grpc_keepalive <- function(time = 60, timeout = 20) {
 #' @export
 print.zugrpc_keepalive <- function(x, ...) {
   cat(sprintf(
-    "<zugrpc_keepalive> PING after %gs idle, answer within %gs\n",
-    x$time,
-    x$timeout
+    "<zugrpc_keepalive> PING after %ss idle, answer within %ss\n",
+    format_seconds(x$time),
+    format_seconds(x$timeout)
   ))
   invisible(x)
 }
@@ -210,15 +233,23 @@ with_keepalive <- function(client, keepalive) {
 
 parse_target <- function(url) {
   ok <- is.character(url) && length(url) == 1L && !is.na(url)
+  # A host name, IPv4 address or bracketed IPv6 address, and a port of 1 to
+  # 65535 when there is one: what the transport cannot connect to is an
+  # argument error here, not UNAVAILABLE on every call (#84).
   m <- if (ok) {
     regmatches(
       url,
-      regexec("^(https?)://([^/?#@]+)/?$", url, ignore.case = TRUE)
+      regexec(
+        "^(https?)://((\\[[0-9A-Fa-f:.]+\\]|[A-Za-z0-9_.-]+)(:([0-9]{1,5}))?)/?$",
+        url,
+        ignore.case = TRUE
+      )
     )[[1L]]
   } else {
     character()
   }
-  if (length(m) != 3L) {
+  port <- if (length(m) == 6L && nzchar(m[6L])) as.integer(m[6L])
+  if (length(m) != 6L || (!is.null(port) && (port < 1L || port > 65535L))) {
     zugrpc_abort(
       "argument",
       "`url` must be one string, http://host:port or https://host:port."
@@ -255,12 +286,28 @@ user_agent <- function() {
   rpc_env$user_agent
 }
 
-check_positive_seconds <- function(x, arg) {
-  if (!is.numeric(x) || length(x) != 1L || !is.finite(x) || x <= 0) {
+# zuhttp keeps keepalive in whole milliseconds, from 1 to the largest C int,
+# so a value outside that range is refused here rather than by zuhttp, or
+# clamped without a word (#85).
+check_keepalive_seconds <- function(x, arg) {
+  ok <- is.numeric(x) &&
+    length(x) == 1L &&
+    is.finite(x) &&
+    x >= 0.001 &&
+    x <= 2147483.647
+  if (!ok) {
     zugrpc_abort(
       "argument",
-      sprintf("`%s` must be one positive number of seconds.", arg)
+      sprintf(
+        "`%s` must be one number of seconds from 0.001 to 2147483.647.",
+        arg
+      )
     )
   }
   invisible(x)
+}
+
+# Every digit, never scientific notation.
+format_seconds <- function(x) {
+  format(x, digits = 15, scientific = FALSE, trim = TRUE)
 }

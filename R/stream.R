@@ -15,11 +15,14 @@
 #'   at the end of the stream. It raises a condition, as [grpc_call()] does,
 #'   when the call ends with a status other than `OK`. A stream that fails
 #'   any other way, such as a lost connection, a passed deadline or a broken
-#'   message, raises the same condition again on every later call.
+#'   message, raises the same condition again on every later call. The
+#'   complete messages that arrived before a broken one are returned first.
 #' * `$trailers()` returns the trailing metadata once `$next_message()` has
 #'   returned `NULL`, and `NULL` before.
-#' * `$status()` returns the final status name, such as `"OK"`, once the
-#'   stream has ended, and `NULL` before.
+#' * `$status()` returns the final status name once the stream has ended,
+#'   and `NULL` before: `"OK"`, the server's status, or the status the stream
+#'   failed with, such as `"CANCELLED"` or `"DEADLINE_EXCEEDED"`. A stream
+#'   that failed without a status, on a protocol error, stays `NULL`.
 #' * `$cancel()` stops the call. The connection stays open for other calls.
 #'   A second `$cancel()` does nothing. A later `$next_message()` raises
 #'   `zugrpc_error_cancelled`.
@@ -85,13 +88,18 @@ new_stream <- function(channel, res, method, deadline_at) {
   st$headers <- lower_names(zuhttp::zu_resp_headers(res))
   st$encoding <- field(st$headers, "grpc-encoding")
   st$user_headers <- metadata_decode(user_metadata(st$headers))
-  st$trailers <- NULL
   st$user_trailers <- NULL
   st$status <- NULL
   st$done <- FALSE
   st$cancelled <- FALSE
+  # Whether any body byte has arrived: a status in the headers counts only
+  # when none did (§6.2).
+  st$body_seen <- FALSE
   # The condition a failed stream raised, raised again by every later read.
   st$error <- NULL
+  # A non-OK status not yet raised, because a warning unwound the read that
+  # found it. The next read raises it (#77).
+  st$unraised <- NULL
   # Pieces of the body not yet split into messages, concatenated only once
   # the message they belong to is complete (§6.3).
   st$pending <- list()
@@ -112,23 +120,46 @@ new_stream <- function(channel, res, method, deadline_at) {
   st$id <- register_stream(channel, res)
 
   # A non-200 status or a body that is not gRPC is known from the headers.
-  if (is.null(field(st$headers, "grpc-status"))) {
+  # A non-OK status in them is resolved when the stream ends (§6.2); an OK
+  # one does not make a body that is not gRPC acceptable (#58).
+  header_status <- field(st$headers, "grpc-status")
+  if (is.null(header_status)) {
     if (st$http_status != 200L) {
       stream_finish(st, abort = TRUE)
-      stop(http_status_error(st$http_status, method, st$user_headers, list()))
+      stop(http_status_error(
+        st$http_status,
+        method,
+        st$user_headers,
+        stats::setNames(list(), character())
+      ))
     }
-    stream_guard(st, check_content_type(st$headers, raw()))
+  }
+  if (
+    (is.null(header_status) ||
+      status_from_header(header_status)$name == "OK") &&
+      !is_grpc_type(st$headers)
+  ) {
+    # The condition keeps the start of the body, as a unary call's does.
+    excerpt <- tryCatch(
+      resp_read(res, 1024),
+      zuhttp_error = function(cnd) raw()
+    )
+    stream_guard(st, check_content_type(st$headers, excerpt))
   }
 
   stream <- list(
     headers = function() st$user_headers,
     next_message = function() stream_next(st),
     trailers = function() st$user_trailers,
-    status = function() st$status,
+    status = function() {
+      stream_sync(st)
+      st$status
+    },
     cancel = function() {
+      stream_sync(st)
       if (!st$done) {
         stream_finish(st, abort = TRUE)
-        st$cancelled <- TRUE
+        stream_cancelled(st)
       }
       invisible(NULL)
     }
@@ -139,6 +170,7 @@ new_stream <- function(channel, res, method, deadline_at) {
 #' @export
 print.zugrpc_stream <- function(x, ...) {
   st <- attr(x, "env")
+  stream_sync(st)
   state <- if (st$cancelled) {
     "cancelled"
   } else if (st$done) {
@@ -154,11 +186,7 @@ print.zugrpc_stream <- function(x, ...) {
 # The next complete message, reading only when none is buffered.
 stream_next <- function(st) {
   repeat {
-    if (st$channel$closed && !st$done) {
-      # grpc_close() has already aborted the response.
-      stream_finish(st, abort = FALSE)
-      st$cancelled <- TRUE
-    }
+    stream_sync(st)
     if (st$cancelled) {
       queue_clear(st)
     }
@@ -176,6 +204,11 @@ stream_next <- function(st) {
       )
     }
     if (st$done) {
+      if (!is.null(st$unraised)) {
+        cnd <- st$unraised
+        st$unraised <- NULL
+        stop(cnd)
+      }
       if (!is.null(st$error)) {
         stop(st$error)
       }
@@ -214,6 +247,7 @@ read_size <- function(st) {
 }
 
 stream_take <- function(st, chunk) {
+  st$body_seen <- TRUE
   st$pending[[length(st$pending) + 1L]] <- chunk
   st$pending_len <- st$pending_len + length(chunk)
   if (st$pending_len < 5) {
@@ -239,12 +273,24 @@ stream_take <- function(st, chunk) {
   }
   framed <- stream_guard(
     st,
-    frame_split(buf, max_message = st$max_message, encoding = st$encoding)
+    frame_split(
+      buf,
+      max_message = st$max_message,
+      encoding = st$encoding,
+      partial = TRUE
+    )
   )
   st$queue <- c(st$queue, framed$messages)
   st$pending <- list()
   st$pending_len <- 0
   st$need <- NULL
+  if (!is.null(framed$error)) {
+    # The complete messages before a bad prefix are delivered first, then
+    # its error, on every later read (#76).
+    stream_finish(st, abort = TRUE)
+    stream_record(st, stamp_call(framed$error, st$method, st$http_status))
+    return(invisible())
+  }
   if (length(framed$remainder) > 0L) {
     stream_take(st, framed$remainder)
   }
@@ -261,39 +307,64 @@ stream_head <- function(st) {
   out
 }
 
-# The body has ended: the status is in the trailers, or in the headers for
-# Trailers-Only.
+# The body has ended. The status is resolved as for a unary call (§6.2):
+# a status the server sent wins over a body that ends inside a message
+# (#58). The stream is marked done only once its outcome is recorded, and
+# warnings from decoding the trailers are held until then, so that one that
+# unwinds cannot make a failed stream read as a clean end (#77).
 stream_end <- function(st) {
-  trailers <- lower_names(zuhttp::zu_resp_trailers(st$res))
+  trailers <- stream_guard(
+    st,
+    lower_names(zuhttp::zu_resp_trailers(st$res))
+  )
+  warnings <- list()
+  outcome <- withCallingHandlers(
+    tryCatch(
+      {
+        st$user_trailers <- metadata_decode(user_metadata(trailers))
+        resolve_status(
+          st$http_status,
+          st$headers,
+          trailers,
+          body_seen = st$body_seen,
+          excerpt = raw(),
+          method = st$method,
+          user_headers = st$user_headers,
+          user_trailers = st$user_trailers
+        )
+        if (st$pending_len > 0) {
+          zugrpc_abort(
+            "protocol",
+            "The response body ends inside a gRPC message."
+          )
+        }
+        NULL
+      },
+      zugrpc_error = function(cnd) stamp_call(cnd, st$method, st$http_status)
+    ),
+    warning = function(w) {
+      warnings[[length(warnings) + 1L]] <<- w
+      invokeRestart("muffleWarning")
+    }
+  )
+
   stream_finish(st, abort = FALSE)
-  st$trailers <- trailers
-  st$user_trailers <- metadata_decode(user_metadata(trailers))
-  if (st$pending_len > 0) {
-    stream_fail(
-      st,
-      zugrpc_error(
-        "protocol",
-        "The response body ends inside a gRPC message.",
-        method = st$method,
-        http_status = st$http_status
-      )
-    )
+  if (is.null(outcome)) {
+    st$status <- "OK"
+  } else if (inherits(outcome, "zugrpc_error_status")) {
+    # A status the server sent is raised once, then the stream reads as
+    # ended (§6.6). Kept until it has been raised.
+    st$status <- outcome$grpc_status
+    st$unraised <- outcome
+  } else {
+    stream_record(st, outcome)
   }
-  status_fields <- trailers
-  if (is.null(field(trailers, "grpc-status"))) {
-    status_fields <- st$headers
+  for (w in warnings) {
+    warning(w)
   }
-  status <- status_from_header(field(status_fields, "grpc-status"))
-  st$status <- status$name
-  if (status$name != "OK") {
-    stop(grpc_status_error(
-      status,
-      status_fields,
-      st$http_status,
-      st$method,
-      st$user_headers,
-      st$user_trailers
-    ))
+  if (!is.null(outcome)) {
+    st$unraised <- NULL
+    stop(outcome)
   }
   invisible()
 }
@@ -344,8 +415,34 @@ stream_guard <- function(st, expr) {
 # Raises `cnd` and keeps it, so that a failed stream never later reads as a
 # clean end.
 stream_fail <- function(st, cnd) {
-  st$error <- cnd
+  stream_record(st, cnd)
   stop(cnd)
+}
+
+# Keeps the condition a stream failed with, and its status when it has one,
+# such as DEADLINE_EXCEEDED or UNAVAILABLE (#86). A protocol error has none.
+stream_record <- function(st, cnd) {
+  st$error <- cnd
+  if (is.character(cnd$grpc_status)) {
+    st$status <- cnd$grpc_status
+  }
+  invisible(cnd)
+}
+
+stream_cancelled <- function(st) {
+  st$cancelled <- TRUE
+  st$status <- "CANCELLED"
+  invisible()
+}
+
+# A stream of a channel that grpc_close() has closed is cancelled: the
+# response is already aborted, and the state says so at once (#86).
+stream_sync <- function(st) {
+  if (st$channel$closed && !st$done) {
+    stream_finish(st, abort = FALSE)
+    stream_cancelled(st)
+  }
+  invisible()
 }
 
 # A seam for tests, which cannot raise an interrupt inside zuhttp.
