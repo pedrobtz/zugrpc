@@ -24,8 +24,9 @@ grpc_channel(
 
 - url:
 
-  The server, as `http://host:port` or `https://host:port`. No path,
-  query or user information.
+  The server, as `http://host:port` or `https://host:port`. The host is
+  a name, an IPv4 address or a bracketed IPv6 address, and the port is
+  from 1 to 65535. No path, query or user information.
 
 - headers:
 
@@ -61,7 +62,10 @@ grpc_channel(
   [`zuhttp::zu_client()`](https://pedrobtz.github.io/zuhttp/reference/zu_client.html)
   to build on, so that proxies, TLS pins, middleware and test transports
   come from `zuhttp` unchanged. The channel derives its own client from
-  it, with HTTP/2 required. `NULL` builds a fresh one.
+  it, with HTTP/2 required, no HTTP content coding and no query. Its
+  headers may not use a name reserved for metadata (see `metadata` in
+  [`grpc_call()`](https://pedrobtz.github.io/zugrpc/reference/grpc_call.md)).
+  `NULL` builds a fresh one.
 
 ## Value
 

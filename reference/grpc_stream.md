@@ -31,8 +31,10 @@ grpc_stream(channel, method, request, metadata = NULL, deadline = NULL)
   Request metadata: a named character vector, or a named list whose
   `-bin` entries are raw vectors. Names are lower-cased. Names starting
   with `grpc-` or `:` are reserved, and so are `te`, `content-type`,
-  `host` and the connection headers HTTP/2 forbids, such as
-  `connection`. A `user-agent` is sent before zugrpc's own.
+  `content-length`, `accept-encoding`, `host` and the connection headers
+  HTTP/2 forbids, such as `connection`. A name given more than once is
+  sent once, its values joined by commas. A `user-agent` is sent before
+  zugrpc's own.
 
 - deadline:
 
@@ -58,12 +60,17 @@ The stream is an object with five methods:
   does, when the call ends with a status other than `OK`. A stream that
   fails any other way, such as a lost connection, a passed deadline or a
   broken message, raises the same condition again on every later call.
+  The complete messages that arrived before a broken one are returned
+  first.
 
 - `$trailers()` returns the trailing metadata once `$next_message()` has
   returned `NULL`, and `NULL` before.
 
-- `$status()` returns the final status name, such as `"OK"`, once the
-  stream has ended, and `NULL` before.
+- `$status()` returns the final status name once the stream has ended,
+  and `NULL` before: `"OK"`, the server's status, or the status the
+  stream failed with, such as `"CANCELLED"` or `"DEADLINE_EXCEEDED"`. A
+  stream that failed without a status, on a protocol error, stays
+  `NULL`.
 
 - `$cancel()` stops the call. The connection stays open for other calls.
   A second `$cancel()` does nothing. A later `$next_message()` raises

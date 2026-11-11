@@ -33,8 +33,10 @@ grpc_call(channel, method, request, metadata = NULL, deadline = NULL)
   Request metadata: a named character vector, or a named list whose
   `-bin` entries are raw vectors. Names are lower-cased. Names starting
   with `grpc-` or `:` are reserved, and so are `te`, `content-type`,
-  `host` and the connection headers HTTP/2 forbids, such as
-  `connection`. A `user-agent` is sent before zugrpc's own.
+  `content-length`, `accept-encoding`, `host` and the connection headers
+  HTTP/2 forbids, such as `connection`. A name given more than once is
+  sent once, its values joined by commas. A `user-agent` is sent before
+  zugrpc's own.
 
 - deadline:
 

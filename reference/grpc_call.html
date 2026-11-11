@@ -79,8 +79,10 @@ condition instead of returning.</p>
 <dd><p>Request metadata: a named character vector, or a named
 list whose <code>-bin</code> entries are raw vectors. Names are lower-cased. Names
 starting with <code>grpc-</code> or <code>:</code> are reserved, and so are <code>te</code>,
-<code>content-type</code>, <code>host</code> and the connection headers HTTP/2 forbids, such
-as <code>connection</code>. A <code>user-agent</code> is sent before zugrpc's own.</p></dd>
+<code>content-type</code>, <code>content-length</code>, <code>accept-encoding</code>, <code>host</code> and the
+connection headers HTTP/2 forbids, such as <code>connection</code>. A name given
+more than once is sent once, its values joined by commas. A
+<code>user-agent</code> is sent before zugrpc's own.</p></dd>
 
 
 <dt id="arg-deadline">deadline<a class="anchor" aria-label="anchor" href="#arg-deadline"></a></dt>
