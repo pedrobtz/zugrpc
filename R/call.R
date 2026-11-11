@@ -14,8 +14,10 @@
 #' @param metadata Request metadata: a named character vector, or a named
 #'   list whose `-bin` entries are raw vectors. Names are lower-cased. Names
 #'   starting with `grpc-` or `:` are reserved, and so are `te`,
-#'   `content-type`, `host` and the connection headers HTTP/2 forbids, such
-#'   as `connection`. A `user-agent` is sent before zugrpc's own.
+#'   `content-type`, `content-length`, `accept-encoding`, `host` and the
+#'   connection headers HTTP/2 forbids, such as `connection`. A name given
+#'   more than once is sent once, its values joined by commas. A
+#'   `user-agent` is sent before zugrpc's own.
 #' @param deadline Seconds from now, or an absolute `POSIXct`, by which the
 #'   call must finish. It is sent to the server as `grpc-timeout` and also
 #'   bounds the request locally. `NULL` sets no deadline.
@@ -196,7 +198,12 @@ build_request <- function(channel, method, request, metadata, deadline) {
   # A caller's user-agent goes before zugrpc's, as other gRPC clients do.
   agent <- user_agent()
   if ("user-agent" %in% names(metadata)) {
-    agent <- paste(metadata[["user-agent"]], agent)
+    # One entry: metadata_encode() joins a repeated name. An empty one adds
+    # nothing, rather than a leading space (#82).
+    caller <- trimws(metadata[["user-agent"]])
+    if (nzchar(caller)) {
+      agent <- paste(caller, agent)
+    }
     metadata <- metadata[names(metadata) != "user-agent"]
   }
   headers <- request_headers(
@@ -205,7 +212,9 @@ build_request <- function(channel, method, request, metadata, deadline) {
     user_agent = agent
   )
   req <- zuhttp::zu_request("POST", paste0(channel$origin, method))
-  req <- do.call(zuhttp::zu_headers, c(list(req), as.list(headers)))
+  # One named vector, never spliced into `...`, where a header named `req`
+  # or a prefix of it would bind to zu_headers()'s own argument (#81).
+  req <- zuhttp::zu_headers(req, headers)
   req <- zuhttp::zu_body_raw(req, body, type = "application/grpc+proto")
   # Without a deadline the request must not keep zuhttp's default timeout,
   # and zuhttp reads a bound that rounds to 0 ms as "its default" too.

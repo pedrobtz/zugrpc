@@ -129,7 +129,7 @@
       grpc_keepalive(time = 0)
     Condition
       Error:
-      ! `time` must be one positive number of seconds.
+      ! `time` must be one number of seconds from 0.001 to 2147483.647.
     Code
       grpc_call(grpc_channel("http://localhost:1"), "a.B/C", raw())
     Condition

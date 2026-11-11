@@ -14,8 +14,9 @@ grpc_channel(
 )
 }
 \arguments{
-\item{url}{The server, as \verb{http://host:port} or \verb{https://host:port}. No
-path, query or user information.}
+\item{url}{The server, as \verb{http://host:port} or \verb{https://host:port}. The
+host is a name, an IPv4 address or a bracketed IPv6 address, and the
+port is from 1 to 65535. No path, query or user information.}
 
 \item{headers}{Metadata sent on every call: a named character vector or a
 named list, as \code{metadata} in \code{\link[=grpc_call]{grpc_call()}}, with the same reserved
@@ -36,8 +37,10 @@ with \code{RESOURCE_EXHAUSTED}.}
 
 \item{client}{A \code{\link[zuhttp:zu_client]{zuhttp::zu_client()}} to build on, so that proxies, TLS
 pins, middleware and test transports come from \code{zuhttp} unchanged. The
-channel derives its own client from it, with HTTP/2 required. \code{NULL}
-builds a fresh one.}
+channel derives its own client from it, with HTTP/2 required, no HTTP
+content coding and no query. Its headers may not use a name reserved
+for metadata (see \code{metadata} in \code{\link[=grpc_call]{grpc_call()}}). \code{NULL} builds a fresh
+one.}
 }
 \value{
 A \code{zugrpc_channel}.

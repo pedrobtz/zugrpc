@@ -488,3 +488,110 @@ test_that("max_message is straddled on the unary path", {
     }
   }
 })
+
+# What a request carries, whatever the caller's names and client --------
+
+test_that("metadata named like zu_headers()'s argument is sent (#81)", {
+  for (name in c("r", "re", "req", "req-x")) {
+    m <- mock_channel(grpc_response())
+    md <- stats::setNames(list("v"), name)
+    grpc_call(m$channel, "/a.B/C", raw(), metadata = md)
+    expect_identical(sent_header(m$seen$requests[[1L]], name), "v", info = name)
+
+    m <- mock_channel(grpc_response(), headers = md)
+    grpc_call(m$channel, "/a.B/C", raw())
+    expect_identical(sent_header(m$seen$requests[[1L]], name), "v", info = name)
+  }
+})
+
+test_that("a repeated metadata name is sent once, its values joined (#82)", {
+  m <- mock_channel(grpc_response())
+  grpc_call(m$channel, "/a.B/C", raw(), metadata = c(A = "1", a = "2"))
+  expect_identical(sent_header(m$seen$requests[[1L]], "a"), "1,2")
+
+  grpc_call(
+    m$channel,
+    "/a.B/C",
+    raw(),
+    metadata = list("k-bin" = as.raw(1), "k-bin" = as.raw(2))
+  )
+  sent <- sent_header(m$seen$requests[[2L]], "k-bin")
+  expect_identical(sent, "AQ,Ag")
+  # What a reader of the joined value gets back.
+  expect_identical(
+    unname(metadata_decode(c("k-bin" = sent))),
+    list(as.raw(1), as.raw(2))
+  )
+
+  m <- mock_channel(grpc_response(), headers = c(x = "1", x = "2"))
+  grpc_call(m$channel, "/a.B/C", raw())
+  expect_identical(sent_header(m$seen$requests[[1L]], "x"), "1,2")
+})
+
+test_that("every user-agent given is kept, and an empty one adds nothing", {
+  m <- mock_channel(grpc_response())
+  grpc_call(
+    m$channel,
+    "/a.B/C",
+    raw(),
+    metadata = c("user-agent" = "one", "user-agent" = "two")
+  )
+  expect_match(
+    sent_header(m$seen$requests[[1L]], "user-agent"),
+    "^one two zugrpc/"
+  )
+
+  grpc_call(m$channel, "/a.B/C", raw(), metadata = c("user-agent" = ""))
+  expect_match(sent_header(m$seen$requests[[2L]], "user-agent"), "^zugrpc/")
+})
+
+test_that("the transport's body headers are reserved (#83)", {
+  for (name in c("content-length", "Accept-Encoding")) {
+    expect_error(
+      metadata_encode(stats::setNames(list("1"), name)),
+      class = "zugrpc_error_argument",
+      info = name
+    )
+  }
+})
+
+test_that("a client's query and reserved headers stay out of requests (#83)", {
+  seen <- new.env()
+  fake <- zuhttp::zu_mock_transport(function(req) {
+    seen$req <- req
+    grpc_response()(req)
+  })
+  ch <- grpc_channel(
+    "http://localhost:50051",
+    client = zuhttp::zu_client(transport = fake, query = list(q = "1"))
+  )
+  grpc_call(ch, "/a.B/C", raw())
+  expect_identical(seen$req$url, "http://localhost:50051/a.B/C")
+
+  for (name in c("grpc-timeout", "te", "content-length")) {
+    expect_error(
+      grpc_channel(
+        "http://localhost:50051",
+        client = zuhttp::zu_client(headers = stats::setNames("1", name))
+      ),
+      class = "zugrpc_error_argument",
+      info = name
+    )
+  }
+  # A header that is not reserved is the caller's to send.
+  ch <- grpc_channel(
+    "http://localhost:50051",
+    client = zuhttp::zu_client(
+      transport = fake,
+      headers = c(authorization = "a")
+    )
+  )
+  grpc_call(ch, "/a.B/C", raw())
+  expect_identical(sent_header(seen$req, "authorization"), "a")
+})
+
+test_that("the channel's client decodes no HTTP content coding (#83)", {
+  ch <- grpc_channel("http://localhost:1")
+  expect_false(client_setting(ch$client, "decode"))
+  expect_false(client_setting(ch$stream_client, "decode"))
+})
