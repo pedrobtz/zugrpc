@@ -18,6 +18,11 @@ gRPC-Web or Connect.
 The specification is [`.agents/design.md`](.agents/design.md), adopted from
 RFC 0069. It outranks this file: `CLAUDE.md` orients, the design doc decides.
 
+What every check must compare against, and where this package says so in
+`.agents/assurance.md`:
+
+@.claude/shared/assurance.md
+
 ## Current state
 
 Scaffolded 2026-11-03 with `create-pkg.sh`. Stages 0 to 4 of

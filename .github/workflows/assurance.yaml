@@ -1,0 +1,15 @@
+# Holds .agents/assurance.md to the portfolio's assurance standard: a
+# malformed file, a `done` no workflow backs, or a gap with no issue fails.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+name: assurance
+
+permissions:
+  contents: read
+
+jobs:
+  assurance:
+    uses: pedrobtz/r-actions/.github/workflows/assurance.yml@v1
