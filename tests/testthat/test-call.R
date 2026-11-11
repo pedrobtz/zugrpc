@@ -586,3 +586,99 @@ test_that("the channel's client decodes no HTTP content coding (#83)", {
   expect_false(client_setting(ch$client, "decode"))
   expect_false(client_setting(ch$stream_client, "decode"))
 })
+
+test_that("the 1 ms local timeout floor is straddled (#71)", {
+  # zuhttp counts whole milliseconds and reads 0 as its default.
+  m <- mock_channel(grpc_response())
+  for (d in c(0.0009, 0.001, 0.0011)) {
+    grpc_call(m$channel, "/a.B/C", raw(), deadline = d)
+  }
+  got <- vapply(m$seen$requests, request_timeout, numeric(1))
+  expect_identical(got[1:2], c(0.001, 0.001))
+  expect_gt(got[3], 0.001)
+  expect_lte(got[3], 0.0011)
+})
+
+test_that("grpc-status is straddled at nine digits, with the second cases (#72)", {
+  # statuscodes.md: a code outside the table is UNKNOWN; zugrpc reads a
+  # value that is not a decimal of at most nine digits as malformed.
+  table <- c(
+    "0" = "OK",
+    "016" = "UNAUTHENTICATED",
+    "17" = "UNKNOWN",
+    "999999999" = "UNKNOWN",
+    "1000000000" = "INTERNAL",
+    "-1" = "INTERNAL",
+    "+1" = "INTERNAL",
+    " 1" = "INTERNAL",
+    "1 " = "INTERNAL",
+    "1e0" = "INTERNAL"
+  )
+  for (value in names(table)) {
+    expect_identical(
+      status_from_header(value)$name,
+      table[[value]],
+      info = value
+    )
+  }
+  m <- mock_channel(grpc_response(trailers = c("grpc-status" = "1000000000")))
+  expect_error(
+    grpc_call(m$channel, "/a.B/C", raw()),
+    class = "zugrpc_error_internal"
+  )
+  m <- mock_channel(grpc_response(trailers = c("grpc-status" = "999999999")))
+  expect_error(
+    grpc_call(m$channel, "/a.B/C", raw()),
+    class = "zugrpc_error_unknown"
+  )
+})
+
+test_that("a unary not-gRPC condition keeps 1 KiB, straddled (#74)", {
+  for (n in c(1023, 1024, 1025)) {
+    page <- as.raw(rep(0x41, n))
+    m <- mock_channel(grpc_response(
+      body = page,
+      trailers = NULL,
+      headers = c("content-type" = "text/html")
+    ))
+    cnd <- expect_error(
+      grpc_call(m$channel, "/a.B/C", raw()),
+      class = "zugrpc_error_protocol"
+    )
+    expect_identical(cnd$body, page[seq_len(min(n, 1024))], info = n)
+  }
+})
+
+test_that("a request is the same under a hostile session (#62)", {
+  # format(), paste() and sprintf() follow these options and the locale;
+  # what zuhttp is handed must not.
+  build <- function() {
+    m <- mock_channel(grpc_response(), headers = c(authorization = "Bearer t"))
+    for (d in c(1e-9, 0.1, 1000, 1e6, 1e9, 1e12)) {
+      grpc_call(
+        m$channel,
+        "/a.B/C",
+        as.raw(0:255),
+        metadata = list(
+          "x-trace-bin" = as.raw(c(0, 255, 16)),
+          "x-n" = "12345678.9",
+          "user-agent" = "app/1.0"
+        ),
+        deadline = d
+      )
+    }
+    lapply(m$seen$requests, function(r) {
+      list(r$url, r$headers, r$body, request_timeout(r))
+    })
+  }
+  plain <- build()
+  hostile <- local({
+    withr::local_options(OutDec = ",", scipen = -5, digits = 3)
+    withr::local_locale(c(LC_COLLATE = "C", LC_CTYPE = "C"))
+    withr::local_timezone("Asia/Kolkata")
+    build()
+  })
+  # The timeouts are measured from a clock, so compare all but those.
+  strip <- function(x) lapply(x, `[`, 1:3)
+  expect_identical(strip(hostile), strip(plain))
+})
