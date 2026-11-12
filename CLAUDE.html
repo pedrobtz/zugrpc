@@ -45,6 +45,8 @@
 <h2 id="what-this-is">What this is<a class="anchor" aria-label="anchor" href="#what-this-is"></a></h2>
 <p>zugrpc is a gRPC client for R. It speaks the gRPC wire protocol (the five-byte message prefix, the gRPC headers, trailers and status) over HTTP/2 requests that <code>zuhttp</code> makes, for unary and server-streaming calls. Callers encode and decode messages with <code>zuproto</code>; zugrpc only looks inside a message to decode <code>google.rpc.Status</code> when a call fails. Its first consumer is <code>zuspark</code> (RFC 0070). It is pure R, with <code>Imports: zuhttp, zuproto</code> as recorded design decisions (D1, D4). It is not a protobuf library, an HTTP client, an HTTP/2 implementation, a server, or gRPC-Web or Connect.</p>
 <p>The specification is <a href=".agents/design.html"><code>.agents/design.md</code></a>, adopted from RFC 0069. It outranks this file: <code>CLAUDE.md</code> orients, the design doc decides.</p>
+<p>What every check must compare against, and where this package says so in <code>.agents/assurance.md</code>:</p>
+<p>@.claude/shared/assurance.md</p>
 </div>
 <div class="section level2">
 <h2 id="current-state">Current state<a class="anchor" aria-label="anchor" href="#current-state"></a></h2>
