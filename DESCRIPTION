@@ -1,5 +1,5 @@
 Package: zugrpc
-Title: Client for 'gRPC' Remote Procedure Calls over 'HTTP/2'
+Title: Client for 'gRPC' Remote Procedure Calls over HTTP/2
 Version: 0.0.0.9000
 Authors@R: c(
     person("Pedro", "Baltazar", , "pedrobtz@gmail.com", role = c("aut", "cre", "cph")),
@@ -7,9 +7,9 @@ Authors@R: c(
            comment = "google/rpc protocol definitions in inst/descriptors")
     )
 Description: A client for 'gRPC' remote procedure calls, written in 'R' on
-    top of the 'HTTP/2' requests that 'zuhttp' makes. Implements the 'gRPC'
+    top of the HTTP/2 requests that 'zuhttp' makes. Implements the 'gRPC'
     wire protocol: length-prefixed messages, request headers and metadata,
-    deadlines, cancellation, and the call status carried in 'HTTP' trailers,
+    deadlines, cancellation, and the call status carried in HTTP trailers,
     with error details decoded into structured conditions. Supports unary
     and server-streaming calls, with streamed responses read one message at
     a time. Messages are encoded and decoded by the caller, for example
