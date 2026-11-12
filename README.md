@@ -8,7 +8,7 @@
 [![Lifecycle:
 experimental](https://img.shields.io/badge/lifecycle-experimental-orange.svg)](https://lifecycle.r-lib.org/articles/stages.html#experimental)
 [![R-CMD-check](https://github.com/pedrobtz/zugrpc/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/pedrobtz/zugrpc/actions/workflows/R-CMD-check.yaml)
-[![coverage](https://raw.githubusercontent.com/pedrobtz/zugrpc/main/.github/badges/coverage.svg)](https://github.com/pedrobtz/zugrpc/actions/workflows/coverage.yaml)
+[![coverage](https://raw.githubusercontent.com/pedrobtz/zugrpc/gh-pages/badges/coverage.svg)](https://github.com/pedrobtz/zugrpc/actions/workflows/coverage.yaml)
 <!-- badges: end -->
 
 ## Overview
