@@ -18,6 +18,16 @@ metadata_encode <- function(metadata) {
       sprintf("Invalid metadata name '%s'.", nms[bad][1L])
     )
   }
+  # zuhttp sends a field once, and joining values is not the same thing to
+  # a server: grpc-go reads `a: 1,2` as one value and refuses a comma in a
+  # -bin one. So a repeated name is refused, in any case (#82).
+  repeated <- duplicated(nms)
+  if (any(repeated)) {
+    zugrpc_abort(
+      "argument",
+      sprintf("Metadata name '%s' is given more than once.", nms[repeated][1L])
+    )
+  }
   reserved <- is_reserved_name(nms)
   if (any(reserved)) {
     zugrpc_abort(
@@ -30,32 +40,7 @@ metadata_encode <- function(metadata) {
     function(i) metadata_value(nms[i], metadata[[i]]),
     character(1)
   )
-  metadata_join(values, nms)
-}
-
-# A name given more than once is sent once, its values joined by commas, as
-# HTTP combines a repeated field and as a reader of `-bin` values splits
-# them (#82). A user-agent is a list of products, so its values are joined
-# by spaces, without empty ones.
-metadata_join <- function(values, nms) {
-  if (!anyDuplicated(nms)) {
-    return(stats::setNames(values, nms))
-  }
-  keys <- unique(nms)
-  joined <- vapply(
-    keys,
-    function(key) {
-      v <- values[nms == key]
-      if (key == "user-agent") {
-        paste(v[nzchar(v)], collapse = " ")
-      } else {
-        paste(v, collapse = ",")
-      }
-    },
-    character(1),
-    USE.NAMES = FALSE
-  )
-  stats::setNames(joined, keys)
+  stats::setNames(values, nms)
 }
 
 # Names that belong to the protocol, not to metadata (§6.2, §6.4): HTTP/2

@@ -286,3 +286,178 @@ test_that("live: tls = zu_tls(ca_file =) trusts a private CA", {
   res <- grpc_call(ch, paste0(interop, "EmptyCall"), raw(), deadline = 10)
   expect_identical(res$status, "OK")
 })
+
+test_that("live: grpc-go reads grpc-timeout as the deadline that was set", {
+  # The other side of the header (#61): tools/test-server answers with the
+  # time left on the call's deadline, as grpc-go decoded it. Each unit
+  # rounds up, by at most one of its steps.
+  ch <- grpc_channel(live_server("ZU_GRPC_TEST_STATUS"))
+  withr::defer(grpc_close(ch))
+  left <- function(deadline) {
+    m <- grpc_call(
+      ch,
+      "/zugrpc.test.Status/Deadline",
+      raw(),
+      deadline = deadline
+    )
+    rawToChar(m$message[-(1:2)])
+  }
+  expect_identical(left(NULL), "none")
+  step <- c(n = 1e-9, u = 1e-6, m = 1e-3, S = 1, M = 60, H = 3600)
+  for (d in c(0.05, 5, 500, 2e5, 1e9, 7e9)) {
+    unit <- substring(grpc_timeout(d), nchar(grpc_timeout(d)))
+    seconds <- as.numeric(left(d)) / 1e9
+    expect_lte(seconds, d + step[[unit]])
+    expect_gt(seconds, d - 1)
+  }
+})
+
+test_that("live: max_message is straddled on unary calls and streams", {
+  # Through zuhttp's own max_body on a real socket, not the mock (#67).
+  url <- live_server("ZU_GRPC_TEST_SERVER")
+  ch <- grpc_channel(url)
+  size <- length(
+    grpc_call(
+      ch,
+      paste0(interop, "UnaryCall"),
+      simple_request(size = 1000),
+      deadline = 10
+    )$message
+  )
+  stream_size <- length(grpc_stream(
+    ch,
+    paste0(interop, "StreamingOutputCall"),
+    streaming_request(1000),
+    deadline = 10
+  )$next_message())
+  grpc_close(ch)
+
+  for (limit in size + c(-1, 0, 1)) {
+    ch <- grpc_channel(url, max_message = limit)
+    call <- function() {
+      grpc_call(
+        ch,
+        paste0(interop, "UnaryCall"),
+        simple_request(size = 1000),
+        deadline = 10
+      )
+    }
+    if (limit >= size) {
+      expect_length(call()$message, size)
+    } else {
+      cnd <- expect_error(call(), class = "zugrpc_error_resource_exhausted")
+      expect_identical(cnd$http_status, 200L)
+    }
+    grpc_close(ch)
+  }
+  for (limit in stream_size + c(-1, 0, 1)) {
+    ch <- grpc_channel(url, max_message = limit)
+    st <- grpc_stream(
+      ch,
+      paste0(interop, "StreamingOutputCall"),
+      streaming_request(1000),
+      deadline = 10
+    )
+    if (limit >= stream_size) {
+      expect_length(st$next_message(), stream_size)
+      expect_null(st$next_message())
+    } else {
+      expect_error(st$next_message(), class = "zugrpc_error_resource_exhausted")
+    }
+    grpc_close(ch)
+  }
+
+  # max_message = 0 takes an empty message and nothing more.
+  ch <- grpc_channel(url, max_message = 0)
+  withr::defer(grpc_close(ch))
+  expect_identical(
+    grpc_call(ch, paste0(interop, "EmptyCall"), raw(), deadline = 10)$message,
+    raw()
+  )
+  expect_error(
+    grpc_call(
+      ch,
+      paste0(interop, "UnaryCall"),
+      simple_request(size = 1),
+      deadline = 10
+    ),
+    class = "zugrpc_error_resource_exhausted"
+  )
+})
+
+test_that("live: a forked child leaves the parent's channel and stream alone", {
+  # A child of fork() shares the parent's sockets (#65). zuhttp's PID guard
+  # gives it connections of its own; the parent's stream and its next call
+  # must be untouched by anything the child does.
+  skip_on_os("windows")
+  ch <- grpc_channel(live_server("ZU_GRPC_TEST_SERVER"))
+  withr::defer(grpc_close(ch))
+  expect_identical(
+    grpc_call(ch, paste0(interop, "EmptyCall"), raw(), deadline = 10)$status,
+    "OK"
+  )
+  st <- grpc_stream(
+    ch,
+    paste0(interop, "StreamingOutputCall"),
+    streaming_request(c(1, 2, 3), interval_us = 200000),
+    deadline = 30
+  )
+  expect_identical(payload_size(st$next_message()), 1)
+
+  child <- parallel::mcparallel({
+    call <- grpc_call(
+      ch,
+      paste0(interop, "EmptyCall"),
+      raw(),
+      deadline = 10
+    )$status
+    # Reading the parent's stream must fail, never yield its next message.
+    read <- tryCatch(
+      {
+        m <- st$next_message()
+        if (is.null(m)) "end" else paste("message", payload_size(m))
+      },
+      zugrpc_error = function(cnd) "error"
+    )
+    st$cancel()
+    grpc_close(ch)
+    list(call = call, read = read)
+  })
+  out <- parallel::mccollect(child, wait = TRUE)[[1L]]
+  expect_identical(out$call, "OK")
+  expect_identical(out$read, "error")
+
+  expect_identical(payload_size(st$next_message()), 2)
+  expect_identical(payload_size(st$next_message()), 3)
+  expect_null(st$next_message())
+  expect_identical(st$status(), "OK")
+  expect_identical(
+    grpc_call(ch, paste0(interop, "EmptyCall"), raw(), deadline = 10)$status,
+    "OK"
+  )
+})
+
+test_that("live: a stream read back with readRDS() fails, and keeps failing", {
+  # The copy's response did not survive serialisation (#66). It must raise
+  # a zugrpc error, the same on every read, while the original reads on.
+  ch <- grpc_channel(live_server("ZU_GRPC_TEST_SERVER"))
+  withr::defer(grpc_close(ch))
+  st <- grpc_stream(
+    ch,
+    paste0(interop, "StreamingOutputCall"),
+    streaming_request(c(1, 2, 3), interval_us = 200000),
+    deadline = 30
+  )
+  expect_identical(payload_size(st$next_message()), 1)
+
+  path <- withr::local_tempfile(fileext = ".rds")
+  saveRDS(st, path)
+  copy <- readRDS(path)
+  first <- expect_error(copy$next_message(), class = "zugrpc_error")
+  again <- expect_error(copy$next_message(), class = "zugrpc_error")
+  expect_identical(class(again), class(first))
+
+  expect_identical(payload_size(st$next_message()), 2)
+  expect_identical(payload_size(st$next_message()), 3)
+  expect_null(st$next_message())
+})

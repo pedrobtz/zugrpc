@@ -17,9 +17,8 @@ grpc_stream(channel, method, request, metadata = NULL, deadline = NULL)
 list whose \code{-bin} entries are raw vectors. Names are lower-cased. Names
 starting with \verb{grpc-} or \code{:} are reserved, and so are \code{te},
 \code{content-type}, \code{content-length}, \code{accept-encoding}, \code{host} and the
-connection headers HTTP/2 forbids, such as \code{connection}. A name given
-more than once is sent once, its values joined by commas. A
-\code{user-agent} is sent before zugrpc's own.}
+connection headers HTTP/2 forbids, such as \code{connection}. Each name may
+be given once. A \code{user-agent} is sent before zugrpc's own.}
 
 \item{deadline}{Seconds from now, or an absolute \code{POSIXct}, by which the
 whole stream must end. It is sent as \code{grpc-timeout}. Locally it is

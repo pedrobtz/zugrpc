@@ -6,7 +6,10 @@
 //     details shaped as Spark Connect's ErrorUtils.scala builds them;
 //     Stall sends its headers and then nothing until the client goes;
 //     SlowStall sends one message after 600 ms and then stalls; and
-//     StreamFail streams two messages and then fails FAILED_PRECONDITION.
+//     StreamFail streams two messages and then fails FAILED_PRECONDITION;
+//     and Deadline answers with the time left on the call's deadline, as
+//     grpc-go read it from grpc-timeout, in nanoseconds as decimal text in a
+//     BytesValue, or "none" without one.
 //   - -h1_tls_port: a TLS server that offers ALPN http/1.1 only, so that
 //     a client requiring HTTP/2 must refuse it.
 //   - -h2_port: a plain HTTP/2 (h2c) server that is not gRPC, answering
@@ -123,6 +126,15 @@ func handle(stream grpc.ServerStream) error {
 			return err
 		}
 		return stall(stream)
+	case "/zugrpc.test.Status/Deadline":
+		// The other side of grpc-timeout: what grpc-go decoded from it.
+		var req wrapperspb.BytesValue
+		_ = stream.RecvMsg(&req)
+		left := "none"
+		if d, ok := stream.Context().Deadline(); ok {
+			left = fmt.Sprintf("%d", time.Until(d).Nanoseconds())
+		}
+		return stream.SendMsg(wrapperspb.Bytes([]byte(left)))
 	case "/zugrpc.test.Status/StreamFail":
 		// Messages, then an error status in the trailers.
 		for _, b := range []byte{1, 2} {

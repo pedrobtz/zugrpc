@@ -219,3 +219,31 @@ test_that("a comma-joined -bin value splits the same at either end", {
   )
   expect_length(metadata_decode(c("v-bin" = "QQ,,Qg")), 3L)
 })
+
+test_that("received metadata: a repeated field and a comma-joined one agree", {
+  # Two spellings of the same metadata (#63), through a call and a stream,
+  # in the initial headers and in the trailers.
+  grpc <- c("content-type" = "application/grpc")
+  repeated <- c("x-bin" = "AQ", "x-bin" = "Ag", y = "a", y = "b")
+  joined <- c("x-bin" = "AQ,Ag", y = "a", y = "b")
+  outcome <- function(extra) {
+    m <- mock_channel(grpc_response(
+      body = wire_message(as.raw(1)),
+      headers = c(grpc, extra),
+      trailers = c("grpc-status" = "0", extra)
+    ))
+    res <- grpc_call(m$channel, "/a.B/C", raw())
+    st <- grpc_stream(m$channel, "/a.B/C", raw())
+    while (!is.null(st$next_message())) {}
+    list(
+      call = list(res$headers, res$trailers),
+      stream = list(st$headers(), st$trailers())
+    )
+  }
+  a <- outcome(repeated)
+  b <- outcome(joined)
+  expect_identical(a, b)
+  expected <- list("x-bin" = as.raw(1), "x-bin" = as.raw(2), y = "a", y = "b")
+  expect_identical(a$call[[1L]], expected)
+  expect_identical(a$stream[[2L]], expected)
+})

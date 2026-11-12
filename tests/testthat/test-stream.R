@@ -682,3 +682,49 @@ test_that("grpc_close() leaves each open stream cancelled at once", {
   expect_output(print(st), "state: cancelled")
   expect_error(st$next_message(), class = "zugrpc_error_cancelled")
 })
+
+test_that("a read asks for the rest of a message, capped at 16 MiB (#73)", {
+  # Each message is read in pieces of at most what is left of it, at least
+  # 64 KiB and at most 16 MiB: straddled at both ends.
+  cap <- 16 * 1024^2
+  for (len in c(65535 - 5, cap - 1, cap, cap + 1)) {
+    sizes <- c()
+    local_mocked_bindings(
+      resp_read = function(res, n) {
+        sizes <<- c(sizes, n)
+        # The prefix alone first, so the next read is sized from it.
+        zuhttp::zu_resp_read(res, if (length(sizes) == 1L) 5 else n)
+      }
+    )
+    m <- mock_channel(grpc_response(body = wire_message(raw(len))))
+    st <- grpc_stream(m$channel, "/a.B/C", raw())
+    expect_length(st$next_message(), len)
+    expect_identical(sizes[2L], max(65536, min(len, cap)), info = len)
+  }
+})
+
+test_that("every recorded unary response ends the same way as a stream (#64)", {
+  # The differential of §6.2 over grpc-go's own responses, not only
+  # hand-built ones.
+  outcome <- function(expr) {
+    tryCatch(
+      {
+        force(expr)
+        "OK"
+      },
+      zugrpc_error = function(cnd) paste(class(cnd)[1L], cnd$grpc_message)
+    )
+  }
+  dir <- test_path("fixtures", "unary")
+  for (file in list.files(dir, pattern = "[.]dput$")) {
+    fx <- dget(file.path(dir, file))
+    body <- fx$request$body[-(1:5)]
+    m <- replay_channel(fx)
+    unary <- outcome(grpc_call(m$channel, fx$request$method, body))
+    stream <- outcome({
+      st <- grpc_stream(m$channel, fx$request$method, body)
+      while (!is.null(st$next_message())) {}
+    })
+    expect_identical(stream, unary, info = file)
+  }
+})

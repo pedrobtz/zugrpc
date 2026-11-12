@@ -2,9 +2,9 @@
 
 * Metadata named `r`, `re` or `req` is sent, instead of failing the call
   with an error from zuhttp (#81).
-* A metadata name given more than once is sent once, its values joined by
-  commas, instead of failing at call time. Every `user-agent` given is
-  kept, and an empty one no longer adds a leading space (#82).
+* A metadata name given more than once is `zugrpc_error_argument`, raised
+  by `grpc_channel()` for channel headers, instead of an error from zuhttp
+  at call time. An empty `user-agent` no longer adds a leading space (#82).
 * Requests no longer ask for HTTP content coding (`accept-encoding: gzip`),
   and a response with one is not decoded. `content-length` and
   `accept-encoding` are reserved names. A client passed to `grpc_channel()`

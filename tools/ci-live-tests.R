@@ -10,12 +10,19 @@ results <- as.data.frame(testthat::test_dir(
 ))
 live <- results[results$file == "test-live.R", ]
 
-# The one allowed skip: a TLS backend that cannot take a private CA, today
-# Windows' Schannel (zuhttp#5). It is allowed only where zuhttp says so, so
-# the test still has to run everywhere else.
+# The allowed skips, each only where the platform cannot run the test, so
+# it still has to run everywhere else: a TLS backend that cannot take a
+# private CA, today Windows' Schannel (zuhttp#5); and fork(), which Windows
+# does not have.
 allowed <- character()
 if (!"ca_file" %in% zuhttp::zu_info()$tls_capabilities) {
-  allowed <- "live: tls = zu_tls(ca_file =) trusts a private CA"
+  allowed <- c(allowed, "live: tls = zu_tls(ca_file =) trusts a private CA")
+}
+if (.Platform$OS.type == "windows") {
+  allowed <- c(
+    allowed,
+    "live: a forked child leaves the parent's channel and stream alone"
+  )
 }
 skipped <- live$skipped & !live$test %in% allowed
 if (nrow(live) == 0L || any(skipped)) {

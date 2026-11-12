@@ -354,9 +354,11 @@ caller's `user-agent` is sent before zugrpc's own. One rule decides the
 reserved names in both directions.
 
 *Decided 2026-11-11 (#81, #82, #83, #84, #85, #87):*
-- **Repeated names.** A metadata name given more than once is sent once,
-  its values joined by commas, as HTTP combines a repeated field. A
-  repeated `user-agent` is joined by spaces, and an empty one adds nothing.
+- **Repeated names.** A metadata name given more than once, in any case, is
+  `zugrpc_error_argument`, from `grpc_channel()` for channel headers.
+  zuhttp sends a field once, and joining the values is not the same thing
+  to a server: grpc-go reads `a: 1,2` as one value, and refuses a comma in
+  a `-bin` value. An empty `user-agent` adds nothing.
 - **Reserved names.** `content-length` and `accept-encoding` are reserved
   too. The channel's client decodes no HTTP content coding and sends
   `accept-encoding: identity`. A caller's client may not set a reserved
