@@ -504,45 +504,36 @@ test_that("metadata named like zu_headers()'s argument is sent (#81)", {
   }
 })
 
-test_that("a repeated metadata name is sent once, its values joined (#82)", {
+test_that("a repeated metadata name is an argument error, nothing sent (#82)", {
   m <- mock_channel(grpc_response())
-  grpc_call(m$channel, "/a.B/C", raw(), metadata = c(A = "1", a = "2"))
-  expect_identical(sent_header(m$seen$requests[[1L]], "a"), "1,2")
-
-  grpc_call(
-    m$channel,
-    "/a.B/C",
-    raw(),
-    metadata = list("k-bin" = as.raw(1), "k-bin" = as.raw(2))
+  repeats <- list(
+    c(A = "1", a = "2"),
+    list("k-bin" = as.raw(1), "k-bin" = as.raw(2)),
+    c("user-agent" = "one", "user-agent" = "two")
   )
-  sent <- sent_header(m$seen$requests[[2L]], "k-bin")
-  expect_identical(sent, "AQ,Ag")
-  # What a reader of the joined value gets back.
-  expect_identical(
-    unname(metadata_decode(c("k-bin" = sent))),
-    list(as.raw(1), as.raw(2))
+  for (md in repeats) {
+    expect_error(
+      grpc_call(m$channel, "/a.B/C", raw(), metadata = md),
+      class = "zugrpc_error_argument"
+    )
+  }
+  expect_length(m$seen$requests, 0L)
+  # Channel headers are refused when the channel is made, not at each call.
+  expect_error(
+    grpc_channel("http://localhost:1", headers = c(x = "1", X = "2")),
+    class = "zugrpc_error_argument"
   )
-
-  m <- mock_channel(grpc_response(), headers = c(x = "1", x = "2"))
-  grpc_call(m$channel, "/a.B/C", raw())
-  expect_identical(sent_header(m$seen$requests[[1L]], "x"), "1,2")
 })
 
-test_that("every user-agent given is kept, and an empty one adds nothing", {
+test_that("an empty user-agent adds nothing to zugrpc's own", {
   m <- mock_channel(grpc_response())
-  grpc_call(
-    m$channel,
-    "/a.B/C",
-    raw(),
-    metadata = c("user-agent" = "one", "user-agent" = "two")
-  )
-  expect_match(
-    sent_header(m$seen$requests[[1L]], "user-agent"),
-    "^one two zugrpc/"
-  )
-
   grpc_call(m$channel, "/a.B/C", raw(), metadata = c("user-agent" = ""))
-  expect_match(sent_header(m$seen$requests[[2L]], "user-agent"), "^zugrpc/")
+  expect_match(sent_header(m$seen$requests[[1L]], "user-agent"), "^zugrpc/")
+  grpc_call(m$channel, "/a.B/C", raw(), metadata = c("user-agent" = "app/1"))
+  expect_match(
+    sent_header(m$seen$requests[[2L]], "user-agent"),
+    "^app/1 zugrpc/"
+  )
 })
 
 test_that("the transport's body headers are reserved (#83)", {
@@ -594,4 +585,100 @@ test_that("the channel's client decodes no HTTP content coding (#83)", {
   ch <- grpc_channel("http://localhost:1")
   expect_false(client_setting(ch$client, "decode"))
   expect_false(client_setting(ch$stream_client, "decode"))
+})
+
+test_that("the 1 ms local timeout floor is straddled (#71)", {
+  # zuhttp counts whole milliseconds and reads 0 as its default.
+  m <- mock_channel(grpc_response())
+  for (d in c(0.0009, 0.001, 0.0011)) {
+    grpc_call(m$channel, "/a.B/C", raw(), deadline = d)
+  }
+  got <- vapply(m$seen$requests, request_timeout, numeric(1))
+  expect_identical(got[1:2], c(0.001, 0.001))
+  expect_gt(got[3], 0.001)
+  expect_lte(got[3], 0.0011)
+})
+
+test_that("grpc-status is straddled at nine digits, with the second cases (#72)", {
+  # statuscodes.md: a code outside the table is UNKNOWN; zugrpc reads a
+  # value that is not a decimal of at most nine digits as malformed.
+  table <- c(
+    "0" = "OK",
+    "016" = "UNAUTHENTICATED",
+    "17" = "UNKNOWN",
+    "999999999" = "UNKNOWN",
+    "1000000000" = "INTERNAL",
+    "-1" = "INTERNAL",
+    "+1" = "INTERNAL",
+    " 1" = "INTERNAL",
+    "1 " = "INTERNAL",
+    "1e0" = "INTERNAL"
+  )
+  for (value in names(table)) {
+    expect_identical(
+      status_from_header(value)$name,
+      table[[value]],
+      info = value
+    )
+  }
+  m <- mock_channel(grpc_response(trailers = c("grpc-status" = "1000000000")))
+  expect_error(
+    grpc_call(m$channel, "/a.B/C", raw()),
+    class = "zugrpc_error_internal"
+  )
+  m <- mock_channel(grpc_response(trailers = c("grpc-status" = "999999999")))
+  expect_error(
+    grpc_call(m$channel, "/a.B/C", raw()),
+    class = "zugrpc_error_unknown"
+  )
+})
+
+test_that("a unary not-gRPC condition keeps 1 KiB, straddled (#74)", {
+  for (n in c(1023, 1024, 1025)) {
+    page <- as.raw(rep(0x41, n))
+    m <- mock_channel(grpc_response(
+      body = page,
+      trailers = NULL,
+      headers = c("content-type" = "text/html")
+    ))
+    cnd <- expect_error(
+      grpc_call(m$channel, "/a.B/C", raw()),
+      class = "zugrpc_error_protocol"
+    )
+    expect_identical(cnd$body, page[seq_len(min(n, 1024))], info = n)
+  }
+})
+
+test_that("a request is the same under a hostile session (#62)", {
+  # format(), paste() and sprintf() follow these options and the locale;
+  # what zuhttp is handed must not.
+  build <- function() {
+    m <- mock_channel(grpc_response(), headers = c(authorization = "Bearer t"))
+    for (d in c(1e-9, 0.1, 1000, 1e6, 1e9, 1e12)) {
+      grpc_call(
+        m$channel,
+        "/a.B/C",
+        as.raw(0:255),
+        metadata = list(
+          "x-trace-bin" = as.raw(c(0, 255, 16)),
+          "x-n" = "12345678.9",
+          "user-agent" = "app/1.0"
+        ),
+        deadline = d
+      )
+    }
+    lapply(m$seen$requests, function(r) {
+      list(r$url, r$headers, r$body, request_timeout(r))
+    })
+  }
+  plain <- build()
+  hostile <- local({
+    withr::local_options(OutDec = ",", scipen = -5, digits = 3)
+    withr::local_locale(c(LC_COLLATE = "C", LC_CTYPE = "C"))
+    withr::local_timezone("Asia/Kolkata")
+    build()
+  })
+  # The timeouts are measured from a clock, so compare all but those.
+  strip <- function(x) lapply(x, `[`, 1:3)
+  expect_identical(strip(hostile), strip(plain))
 })

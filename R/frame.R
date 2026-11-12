@@ -10,18 +10,23 @@ frame_encode <- function(message) {
   if (!is.raw(message)) {
     zugrpc_abort("argument", "`request` must be a raw vector.")
   }
-  n <- length(message)
+  c(frame_prefix(length(message)), message)
+}
+
+# The five-byte prefix of an uncompressed message of `n` bytes. The length
+# is four bytes, so `n` is at most 4294967295. A helper of its own, so that
+# the limit can be tested without a 4 GiB vector (#69).
+frame_prefix <- function(n) {
   if (n > 4294967295) {
     zugrpc_abort("argument", "`request` must be at most 4 GiB.")
   }
-  prefix <- as.raw(c(
+  as.raw(c(
     0,
     (n %/% 16777216) %% 256,
     (n %/% 65536) %% 256,
     (n %/% 256) %% 256,
     n %% 256
   ))
-  c(prefix, message)
 }
 
 # The message length a five-byte prefix declares, as a double: it can exceed

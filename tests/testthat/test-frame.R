@@ -108,3 +108,21 @@ test_that("frame_split() handles many small messages in one buffer", {
   expect_length(res$messages, 2000)
   expect_identical(res$messages, msgs)
 })
+
+test_that("the request length is straddled at the four-byte limit (#69)", {
+  expect_identical(
+    frame_prefix(4294967294),
+    as.raw(c(0, 0xff, 0xff, 0xff, 0xfe))
+  )
+  expect_identical(
+    frame_prefix(4294967295),
+    as.raw(c(0, 0xff, 0xff, 0xff, 0xff))
+  )
+  expect_error(frame_prefix(4294967296), class = "zugrpc_error_argument")
+  # The reader's round trip of the same prefixes.
+  expect_identical(frame_length(frame_prefix(4294967294)), 4294967294)
+  expect_identical(frame_length(frame_prefix(4294967295)), 4294967295)
+  for (n in c(0, 255, 256, 65535, 65536, 16777215, 16777216)) {
+    expect_identical(frame_length(frame_prefix(n)), n, info = n)
+  }
+})

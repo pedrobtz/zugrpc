@@ -203,3 +203,20 @@ test_that("grpc_keepalive() takes zuhttp's range, and prints it exactly (#85)", 
     "PING after 1234567s idle, answer within 2000000.5s"
   )
 })
+
+test_that("the max_message argument is straddled at both ends (#68)", {
+  for (x in c(0, 1, 4294967294, 4294967295)) {
+    expect_s3_class(
+      grpc_channel("http://h:1", max_message = x),
+      "zugrpc_channel"
+    )
+  }
+  for (x in list(-1, 4294967296, NA_real_, Inf, c(1, 2), numeric(), "1")) {
+    expect_error(
+      grpc_channel("http://h:1", max_message = x),
+      class = "zugrpc_error_argument"
+    )
+  }
+  ch <- grpc_channel("http://h:1", max_message = 0)
+  expect_identical(client_setting(ch$client, "max_body"), 5)
+})
