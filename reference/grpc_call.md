@@ -34,9 +34,8 @@ grpc_call(channel, method, request, metadata = NULL, deadline = NULL)
   `-bin` entries are raw vectors. Names are lower-cased. Names starting
   with `grpc-` or `:` are reserved, and so are `te`, `content-type`,
   `content-length`, `accept-encoding`, `host` and the connection headers
-  HTTP/2 forbids, such as `connection`. A name given more than once is
-  sent once, its values joined by commas. A `user-agent` is sent before
-  zugrpc's own.
+  HTTP/2 forbids, such as `connection`. Each name may be given once. A
+  `user-agent` is sent before zugrpc's own.
 
 - deadline:
 

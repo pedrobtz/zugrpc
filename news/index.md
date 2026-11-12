@@ -6,9 +6,11 @@
   with an error from zuhttp
   ([\#81](https://github.com/pedrobtz/zugrpc/issues/81)).
 
-- A metadata name given more than once is sent once, its values joined
-  by commas, instead of failing at call time. Every `user-agent` given
-  is kept, and an empty one no longer adds a leading space
+- A metadata name given more than once is `zugrpc_error_argument`,
+  raised by
+  [`grpc_channel()`](https://pedrobtz.github.io/zugrpc/reference/grpc_channel.md)
+  for channel headers, instead of an error from zuhttp at call time. An
+  empty `user-agent` no longer adds a leading space
   ([\#82](https://github.com/pedrobtz/zugrpc/issues/82)).
 
 - Requests no longer ask for HTTP content coding
