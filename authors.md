@@ -13,11 +13,11 @@ Source:
 [`DESCRIPTION`](https://github.com/pedrobtz/zugrpc/blob/main/DESCRIPTION)
 
 Baltazar P (2026). *zugrpc: Client for 'gRPC' Remote Procedure Calls
-over 'HTTP/2'*. R package version 0.0.0.9000,
+over HTTP/2*. R package version 0.0.0.9000,
 <https://github.com/pedrobtz/zugrpc>.
 
     @Manual{,
-      title = {zugrpc: Client for 'gRPC' Remote Procedure Calls over 'HTTP/2'},
+      title = {zugrpc: Client for 'gRPC' Remote Procedure Calls over HTTP/2},
       author = {Pedro Baltazar},
       year = {2026},
       note = {R package version 0.0.0.9000},
