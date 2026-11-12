@@ -9,8 +9,10 @@ columns as they are.
 - **Live:** `test-live.R` and `test-spark.R` run only in `live.yaml`,
   against grpc-go's interop server at v1.67.1, `tools/test-server`
   (the same grpc-go) and Spark Connect 4.2.1.
-- **Pending merge:** the rows that cite #92's tests hold once #90, #91 and
-  #92 are merged; merge this file after them.
+- **Fuzzing:** `fuzz.yaml` runs `tools/fuzz/fuzz.R`, whose six targets
+  each check an oracle, and `tools/fuzz/reach.R`, which holds each parser's
+  covr reach to a floor. r-actions' `fuzz.yml` is libFuzzer over C, which
+  zugrpc does not have (D1).
 
 ## Kinds
 
@@ -22,10 +24,10 @@ columns as they are.
 check. Add `(own)` when that workflow is the package's own rather than a
 call to r-actions.
 
-| Check      | Status | Where |
-| ---------- | ------ | ----- |
-| fuzz       | gap #59 |       |
-| fuzz-reach | gap #60 |       |
+| Check      | Status | Where           |
+| ---------- | ------ | --------------- |
+| fuzz       | done   | fuzz.yaml (own) |
+| fuzz-reach | done   | fuzz.yaml (own) |
 
 ## Boundaries
 
