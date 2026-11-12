@@ -1,0 +1,33 @@
+source("common.R")
+cat("== client headers vs channel headers vs metadata\n")
+seen <- NULL
+fake <- zuhttp::zu_mock_transport(function(req) { seen <<- req; zuhttp::zu_response(200L, headers = c("content-type" = "application/grpc"), body = as.raw(c(0,0,0,0,0)), trailers = c("grpc-status" = "0")) })
+cl <- zuhttp::zu_client(transport = fake, headers = c("x-client" = "1", te = "gzip", "grpc-timeout" = "1S", a = "client", "User-Agent" = "cl/1", "grpc-accept-encoding" = "gzip", "X-Up" = "client"))
+ch <- grpc_channel("http://h:1", client = cl, headers = c(a = "chan")); grpc_call(ch, M, raw(), metadata = c("x-up" = "call")); print(seen$headers)
+cat("== base64\n")
+e <- zugrpc:::base64_encode; d <- zugrpc:::base64_decode
+set.seed(2); bad <- 0
+for (n in c(0:70, 1000, 65537)) { x <- as.raw(sample(0:255, n, TRUE)); s <- e(x); ref <- gsub("=|\n", "", jsonlite::base64_enc(x)); if (!identical(s, ref) || !identical(d(s), x) || !identical(d(jsonlite::base64_enc(x) |> gsub("\n", "", x = _)), x)) bad <- bad + 1 }
+cat("mismatches vs jsonlite:", bad, "\n")
+x <- as.raw(rep(255, 300000)); cat("300k 0xff ok:", identical(d(e(x)), x), "\n")
+for (s in list("", "=", "==", "QQ", "QQ=", "QQ==", "QQ===", "Q", "QUI", "QUJD", "QUJ D", "QU-_", "QQ==QQ==", "Q=Q=", "QR", "QUJ=", NA_character_, c("QQ", "QQ"), 1, "QQ\n")) { cat(encodeString(deparse(s)[1]), "=> "); r <- try_(d(s)); if (inherits(r, "caught")) print(r) else cat(format(r), "\n") }
+cat("== result and condition fields\n")
+resp <- function(status = 200L, headers = c("content-type" = "application/grpc"), body = as.raw(c(0,0,0,0,0)), trailers = c("grpc-status" = "0")) function(req) zuhttp::zu_response(status, headers = headers, body = body, trailers = trailers)
+m <- mock(respond = resp(headers = c("content-type" = "application/grpc", "X-A" = "1", "x-a" = "2", "x-bin" = "QQ,Qg==", "date" = "now", "user-agent" = "srv", "Grpc-Foo" = "hidden"), trailers = c("grpc-status" = "0", "grpc-message" = "fine", "x-t" = "t", "x-t-bin" = "")))
+r <- grpc_call(m$ch, M, raw()); str(r)
+m <- mock(respond = resp(headers = c("content-type" = "application/grpc", "x-h" = "1"), body = raw(), trailers = c("grpc-status" = "5", "grpc-message" = "no%20such %E2%82%AC thing", "x-t" = "t")))
+r <- try_(grpc_call(m$ch, M, raw())); e5 <- tryCatch(grpc_call(m$ch, M, raw()), error = identity); print(class(e5)); str(unclass(e5)[setdiff(names(e5), "call")])
+st <- grpc_stream(m$ch, M, raw()); print(st); print(st$status()); print(st$trailers()); e6 <- tryCatch(st$next_message(), error = identity); cat("stream cond fields same as unary:", identical(unclass(e5)[sort(names(e5))], unclass(e6)[sort(names(e6))]), "\n"); print(setdiff(names(e5), names(e6))); print(st); print(st$status()); str(st$trailers()); print(try_(st$next_message())); print(st$next_message())
+cat("== stream after OK end\n")
+m <- mock(respond = resp(body = as.raw(c(0,0,0,0,1,7, 0,0,0,0,0)), trailers = c("grpc-status" = "0", "x-t" = "t")))
+st <- grpc_stream(m$ch, M, raw()); print(m$ch); print(st$next_message()); print(st$status()); print(st$next_message()); print(st$next_message()); print(st$status()); print(st$next_message()); str(st$trailers()); print(st); print(m$ch); st$cancel(); print(st); print(st$next_message())
+st <- grpc_stream(m$ch, M, raw()); st$cancel(); print(st); print(st$status()); print(try_(st$next_message())); print(st$trailers()); print(m$ch)
+st <- grpc_stream(m$ch, M, raw()); st$next_message(); grpc_close(m$ch); print(try_(st$next_message())); print(st); print(m$ch)
+cat("== unary vs stream on same OK response: headers/trailers equal\n")
+hh <- c("content-type" = "application/grpc", "X-A" = "1", "x-bin" = "QQ,Qg==", "x-a" = "2"); tt <- c("grpc-status" = "0", "x-t" = "t", "Y-bin" = "AAA")
+m <- mock(respond = resp(headers = hh, trailers = tt)); u <- grpc_call(m$ch, M, raw()); st <- grpc_stream(m$ch, M, raw()); msgs <- list(); while (!is.null(x <- st$next_message())) msgs <- c(msgs, list(x))
+cat(identical(u$headers, st$headers()), identical(u$trailers, st$trailers()), identical(u$message, msgs[[1]]), u$status == st$status(), "\n"); str(u$trailers)
+cat("== lookup by name on result: partial\n"); m <- mock(respond = resp(headers = c("content-type" = "application/grpc", "x-request-id-extra" = "WRONG"))); u <- grpc_call(m$ch, M, raw()); cat("u$headers$`x-request-id` ->", deparse(u$headers$`x-request-id`), "\n")
+cat("== prints\n"); print(grpc_keepalive(0.5, 1e-3)); print(zugrpc_info()); str(grpc_status_codes()); x <- grpc_status_codes(); x$name[1] <- "ZZ"; cat(grpc_status_codes()$name[1], "\n")
+options(OutDec = ","); print(grpc_keepalive(0.5, 2.5)); options(OutDec = ".")
+print(grpc_channel("https://[::1]:443"))

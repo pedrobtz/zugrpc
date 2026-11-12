@@ -1,0 +1,12 @@
+source("<W>/hunt-2/common.R")
+c1 <- ch(max_message = 100)
+set_scen(M = list(h(H0), d(paste0(frs("hi"), "0000000065")), list(sleep = 300), h(list(c("x-t", "1"), c("grpc-status", "0")), TRUE)))
+st <- grpc_stream(c1, "/s.S/M", raw())
+e <- tryCatch(st$next_message(), error = function(e) e)
+cat("first next_message():", class(e)[1:2], "| grpc_status", e$grpc_status, "| status()", deparse(st$status()), "| trailers()", deparse(st$trailers()), "\n")
+e2 <- tryCatch(st$next_message(), error = function(e) e); cat("again:", class(e2)[1], "\n"); print(st)
+# partial body + non-OK trailers: what the caller can still learn
+set_scen(M = list(h(H0), d("0000000005aa"), h(list(c("grpc-status", "4"), c("grpc-message", "server deadline"), c("x-t", "1")), TRUE)))
+st <- grpc_stream(c1, "/s.S/M", raw()); e <- tryCatch(st$next_message(), error = function(e) e)
+cat("partial + status 4:", class(e)[1], "| status()", deparse(st$status()), "| trailers()", deparse(st$trailers()), "| e$trailers", deparse(e$trailers), "\n")
+grpc_close(c1)
