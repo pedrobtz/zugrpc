@@ -14,7 +14,7 @@ on:
   # takes the slot after coverage.yaml's, with a longer budget.
   pull_request:
   schedule:
-    - cron: "33 4 * * 0"
+    - cron: "33 4 * * 5"  # weekly, Fridays
   workflow_dispatch:
 
 name: fuzz
