@@ -1,4 +1,7 @@
 module h2script
-go 1.22
-require golang.org/x/net v0.28.0
-require golang.org/x/text v0.17.0 // indirect
+
+go 1.25.0
+
+require golang.org/x/net v0.55.0
+
+require golang.org/x/text v0.37.0 // indirect
