@@ -20,8 +20,14 @@ RFC 0069. It outranks this file: `CLAUDE.md` orients, the design doc decides.
 
 What every check must compare against, and where this package says so in
 `.agents/assurance.md`:
+<!-- r-skills: shared-rules -->
 
-@.claude/shared/assurance.md
+The portfolio's shared rules (`workflow`, `r-package`, `ci`, `native-code`,
+`correctness`, `assurance`) come from the
+[r-skills](https://github.com/pedrobtz/r-skills) plugin's `rules/`, loaded at
+session start because of the marker above. Never copy them here. Where this
+file and a shared rule disagree, this file wins for this package. Cloud
+sessions do not load the plugin and run without them.
 
 ## Current state
 
